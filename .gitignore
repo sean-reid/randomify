@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+build/
+.svelte-kit/
+.wrangler/
+.turbo/
+*.tsbuildinfo
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+.dev.vars
+.dev.vars.*
+
+# Data artifacts (MusicBrainz dumps, DuckDB files, intermediates)
+data/
+*.duckdb
+*.duckdb.wal
+*.parquet
+dumps/
+
+# Test / coverage output
+coverage/
+playwright-report/
+test-results/
+.playwright/
+
+# Editor / OS
+.DS_Store
+.idea/
+*.log
+
+# Local agent tooling (never committed)
+.claude/
+CLAUDE.md
