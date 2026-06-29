@@ -20,12 +20,12 @@ Pandora, and Bandcamp.
 
 This is a pnpm + Turbo monorepo.
 
-| Path              | What it is                                              |
-| ----------------- | ------------------------------------------------------- |
-| `apps/web`        | SvelteKit frontend (Cloudflare Pages)                   |
-| `apps/api`        | TypeScript Worker serving the sampler                   |
-| `pipeline`        | Corpus build: MusicBrainz ingest, link resolution       |
-| `packages/shared` | Shared types, platform registry, sampler core           |
+| Path              | What it is                                        |
+| ----------------- | ------------------------------------------------- |
+| `apps/web`        | SvelteKit frontend (Cloudflare Pages)             |
+| `apps/api`        | TypeScript Worker serving the sampler             |
+| `pipeline`        | Corpus build: MusicBrainz ingest, link resolution |
+| `packages/shared` | Shared types, platform registry, sampler core     |
 
 ## Development
 
