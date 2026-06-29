@@ -1,8 +1,8 @@
 # randomify
 
-Discover music through true randomness. randomify samples a song from a deep
-corpus of published music and hands you the links to play it on every major
-streaming service.
+Hit shuffle on everything ever recorded. randomify picks a song at random from a
+deep catalog of published music and hands you the links to play it on every
+major streaming service.
 
 No recommendations, no curation, no algorithm tuned to keep you listening to
 what you already like. Just a fair shot at anything ever recorded.
