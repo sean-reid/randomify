@@ -1,0 +1,12 @@
+name = "randomify-api"
+main = "src/index.ts"
+compatibility_date = "2025-06-01"
+compatibility_flags = ["nodejs_compat"]
+
+# The corpus lives in Neon Postgres, reached from the Worker through Hyperdrive.
+# Provisioned in the corpus PR; until then the Worker serves a built-in demo
+# corpus so the endpoint is fully runnable.
+#
+# [[hyperdrive]]
+# binding = "HYPERDRIVE"
+# id = "<hyperdrive-config-id>"
