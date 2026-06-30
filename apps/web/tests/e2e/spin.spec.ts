@@ -47,6 +47,17 @@ test('shuffling fetches another song', async ({ page }) => {
   expect(spins).toBeGreaterThan(0);
 });
 
+test('hides the space-key hint on touch devices', async ({ page }, testInfo) => {
+  await page.goto('/');
+  await expect(page.getByTestId('title')).toBeVisible();
+  const hint = page.getByTestId('hint');
+  if (testInfo.project.name === 'mobile') {
+    await expect(hint).toBeHidden();
+  } else {
+    await expect(hint).toBeVisible();
+  }
+});
+
 test('the space key triggers a shuffle', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByTestId('title')).toBeVisible();

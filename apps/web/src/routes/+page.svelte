@@ -117,7 +117,7 @@
     {loading ? 'Finding a song' : 'Shuffle'}
   </button>
 
-  <p class="hint">Press <kbd>space</kbd> for another</p>
+  <p class="hint" data-testid="hint">Press <kbd>space</kbd> for another</p>
 </main>
 
 <style>
@@ -296,5 +296,12 @@
     margin: 0;
     color: var(--ink-soft);
     font-size: 0.85rem;
+  }
+
+  /* No physical keyboard on touch devices, so the space-key hint is noise. */
+  @media (hover: none) and (pointer: coarse) {
+    .hint {
+      display: none;
+    }
   }
 </style>
