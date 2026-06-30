@@ -3,11 +3,12 @@ import { applySchema } from '../corpus/export.js';
 import { applyBacklogSchema } from './backlog.js';
 import { PostgresResolutionCache } from './postgres-cache.js';
 import { resolveBacklog } from './resolve-backlog.js';
+import { intEnv } from './env.js';
 
 /**
  * Incremental resolve pass for the hourly cron: resolve a chunk of unresolved
  * backlog recordings and upsert them into the serving corpus. No dump, no
- * extract — just Postgres + the throttled resolvers. Resumable across runs.
+ * extract - just Postgres + the throttled resolvers. Resumable across runs.
  *
  * DATABASE_URL  Postgres connection string for the corpus
  * LIMIT         how many recordings to resolve this run (default 1000)
@@ -17,7 +18,7 @@ if (!databaseUrl) {
   console.error('DATABASE_URL is required');
   process.exit(1);
 }
-const limit = process.env.LIMIT ? Number(process.env.LIMIT) : 1000;
+const limit = intEnv('LIMIT', 1000);
 
 const pg = new Client({ connectionString: databaseUrl });
 await pg.connect();

@@ -7,7 +7,7 @@ function main(): void {
 
   console.log('Stages:');
   for (const [i, stage] of PIPELINE_STAGES.entries()) {
-    console.log(`  ${i + 1}. ${stage.title} — ${stage.detail}`);
+    console.log(`  ${i + 1}. ${stage.title} - ${stage.detail}`);
   }
 
   console.log('\nResolvers:');
@@ -15,7 +15,7 @@ function main(): void {
     const strategies = resolver.strategies.length
       ? resolver.strategies.map((s) => s.name).join(', ')
       : 'search-fallback only (not yet implemented)';
-    console.log(`  ${resolver.platform} [${resolver.approach}] — ${strategies}`);
+    console.log(`  ${resolver.platform} [${resolver.approach}] - ${strategies}`);
   }
 }
 

@@ -1,6 +1,7 @@
 import { Client } from 'pg';
 import { extractMusicBrainz } from '../ingest/musicbrainz.js';
 import { populateBacklog } from './backlog.js';
+import { optionalIntEnv } from './env.js';
 
 /**
  * Refresh the candidate backlog from an extracted MusicBrainz dump. Run by the
@@ -17,9 +18,7 @@ if (!dumpDir || !databaseUrl) {
   console.error('MB_DUMP_DIR and DATABASE_URL are required');
   process.exit(1);
 }
-const candidateLimit = process.env.MB_CANDIDATE_LIMIT
-  ? Number(process.env.MB_CANDIDATE_LIMIT)
-  : undefined;
+const candidateLimit = optionalIntEnv('MB_CANDIDATE_LIMIT');
 
 const pg = new Client({ connectionString: databaseUrl });
 await pg.connect();
