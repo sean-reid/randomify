@@ -24,7 +24,8 @@ await pg.connect();
 try {
   const limit = process.env.LIMIT ? Number(process.env.LIMIT) : undefined;
   const client = {
-    query: (sql: string, params?: unknown[]) => pg.query(sql, params).then((r) => ({ rows: r.rows })),
+    query: (sql: string, params?: unknown[]) =>
+      pg.query(sql, params).then((r) => ({ rows: r.rows })),
   };
   const cache = new PostgresResolutionCache(client);
   await cache.init();
