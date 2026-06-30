@@ -6,5 +6,6 @@ export * from './corpus/export.js';
 export * from './resolvers/index.js';
 export * from './run/prioritize.js';
 export * from './run/resolve-batch.js';
+export * from './run/postgres-cache.js';
 export * from './run/build-corpus.js';
 export * from './run/pipeline.js';

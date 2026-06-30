@@ -1,6 +1,6 @@
 import { Client } from 'pg';
 import { runPipeline } from './pipeline.js';
-import { InMemoryResolutionCache } from './resolve-batch.js';
+import { PostgresResolutionCache } from './postgres-cache.js';
 
 /**
  * Pipeline entrypoint for the scheduled runner. Reads the extracted dump
@@ -23,10 +23,15 @@ const pg = new Client({ connectionString: databaseUrl });
 await pg.connect();
 try {
   const limit = process.env.LIMIT ? Number(process.env.LIMIT) : undefined;
+  const client = {
+    query: (sql: string, params?: unknown[]) => pg.query(sql, params).then((r) => ({ rows: r.rows })),
+  };
+  const cache = new PostgresResolutionCache(client);
+  await cache.init();
   const summary = await runPipeline({
     ingestDir,
-    client: { query: (sql, params) => pg.query(sql, params).then((r) => ({ rows: r.rows })) },
-    cache: new InMemoryResolutionCache(),
+    client,
+    cache,
     ...(limit !== undefined ? { limit } : {}),
   });
   console.log(JSON.stringify(summary, null, 2));
