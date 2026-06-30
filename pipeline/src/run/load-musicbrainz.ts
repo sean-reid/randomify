@@ -24,6 +24,9 @@ const pg = new Client({ connectionString: databaseUrl });
 await pg.connect();
 try {
   const limit = process.env.LIMIT ? Number(process.env.LIMIT) : undefined;
+  const extractLimit = process.env.MB_EXTRACT_LIMIT
+    ? Number(process.env.MB_EXTRACT_LIMIT)
+    : undefined;
   const client = {
     query: (sql: string, params?: unknown[]) =>
       pg.query(sql, params).then((r) => ({ rows: r.rows })),
@@ -36,6 +39,7 @@ try {
     client,
     cache,
     ...(limit !== undefined ? { limit } : {}),
+    ...(extractLimit !== undefined ? { extractLimit } : {}),
   });
   console.log(JSON.stringify(summary, null, 2));
 } finally {

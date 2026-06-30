@@ -1,4 +1,5 @@
 import { DuckDBInstance } from '@duckdb/node-api';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type { NormalizedRecording } from './ingest.js';
 
@@ -30,8 +31,12 @@ const TABLES: Record<string, string> = {
   release_group: 'c0::BIGINT AS id, c1 AS gid, c2 AS name',
   release_group_meta: 'c0::BIGINT AS id, TRY_CAST(c2 AS INT) AS first_year',
   area: 'c0::BIGINT AS id, c2 AS name',
-  language: 'c0::BIGINT AS id, c4 AS iso3',
+  language: 'c0::BIGINT AS id, c6 AS iso3',
 };
+
+// Tables that may be absent from a core-only dump (release_group_meta lives in
+// the derived dump). Missing optional tables become empty, yielding null years.
+const OPTIONAL = new Set(['release_group_meta']);
 
 /** Dump file name for each alias (mbdump table names). */
 const FILES: Record<string, string> = {
@@ -104,12 +109,30 @@ function str(value: unknown): string | null {
   return value == null || value === '' ? null : String(value);
 }
 
-export async function extractMusicBrainz(dumpDir: string): Promise<NormalizedRecording[]> {
+export async function extractMusicBrainz(
+  dumpDir: string,
+  limit?: number,
+): Promise<NormalizedRecording[]> {
   const instance = await DuckDBInstance.create(':memory:');
   const connection = await instance.connect();
 
   for (const [alias, columns] of Object.entries(TABLES)) {
-    const path = join(dumpDir, FILES[alias]!).replace(/'/g, "''");
+    const filePath = join(dumpDir, FILES[alias]!);
+
+    if (!existsSync(filePath)) {
+      if (!OPTIONAL.has(alias)) throw new Error(`missing required dump table: ${FILES[alias]}`);
+      // Create an empty table with the projected columns so joins still work.
+      const maxIdx = Math.max(0, ...[...columns.matchAll(/c(\d+)/g)].map((m) => Number(m[1])));
+      const stub = Array.from({ length: maxIdx + 1 }, (_, i) => `NULL::VARCHAR AS c${i}`).join(
+        ', ',
+      );
+      await connection.run(
+        `CREATE TABLE ${alias} AS SELECT ${columns} FROM (SELECT ${stub}) WHERE false`,
+      );
+      continue;
+    }
+
+    const path = filePath.replace(/'/g, "''");
     const read = `read_csv('${path}', delim='\t', header=false, quote='', nullstr='\\N', all_varchar=true`;
 
     // Detect the column count so columns get stable names (c0, c1, ...)
@@ -126,7 +149,9 @@ export async function extractMusicBrainz(dumpDir: string): Promise<NormalizedRec
     );
   }
 
-  const result = await connection.run(EXTRACT_SQL);
+  const sql =
+    limit && Number.isInteger(limit) && limit > 0 ? `${EXTRACT_SQL} LIMIT ${limit}` : EXTRACT_SQL;
+  const result = await connection.run(sql);
   const rows = await result.getRowObjects();
   return rows.map((row) => ({
     recordingId: String(row.recordingId),
