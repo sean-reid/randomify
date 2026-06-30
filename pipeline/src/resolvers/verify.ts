@@ -91,3 +91,15 @@ export const CONFIDENCE_THRESHOLD = 0.82;
 export function isConfident(score: number): boolean {
   return score >= CONFIDENCE_THRESHOLD;
 }
+
+/**
+ * Floor below which even an ISRC ("trusted") match is rejected. A legitimate
+ * ISRC match agrees on artist and title and scores well above this; a score
+ * near zero means a bad ISRC (in MusicBrainz or the platform) pointing at a
+ * different song, which we must not serve as a confident link.
+ */
+export const SANITY_FLOOR = 0.5;
+
+export function passesSanity(score: number): boolean {
+  return score >= SANITY_FLOOR;
+}
