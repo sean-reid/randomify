@@ -17,7 +17,9 @@ const exactIfIsrc: PlatformResolver = {
       name: 'fake',
       run: (fp) =>
         Promise.resolve(
-          fp.isrc ? { url: `https://deezer/${fp.isrc}`, matched: fp, trusted: true } : null,
+          fp.isrc
+            ? { url: `https://deezer/${fp.isrc}`, matched: fp, trusted: true, previewUrl: 'p' }
+            : null,
         ),
     },
   ],
@@ -61,7 +63,9 @@ describe('runPipeline', () => {
           run: (fp) => {
             calls += 1;
             return Promise.resolve(
-              fp.isrc ? { url: `https://deezer/${fp.isrc}`, matched: fp, trusted: true } : null,
+              fp.isrc
+                ? { url: `https://deezer/${fp.isrc}`, matched: fp, trusted: true, previewUrl: 'p' }
+                : null,
             );
           },
         },

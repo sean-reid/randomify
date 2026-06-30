@@ -26,6 +26,8 @@ const exact = (platform: Resolution['platform']): Resolution => ({
   kind: 'exact',
   confidence: 1,
   strategy: 'fake',
+  // A Deezer match needs a preview to be kept, so the helper carries one by default.
+  ...(platform === 'deezer' ? { previewUrl: 'https://cdnt-preview.dzcdn.net/x.mp3' } : {}),
 });
 const fallback = (platform: Resolution['platform']): Resolution => ({
   platform,
@@ -64,10 +66,22 @@ describe('buildCorpusData', () => {
     });
   });
 
-  it('leaves preview and cover null when no exact link carries them', () => {
-    const corpus = buildCorpusData([rec('r1', 'a1')], new Map([['r1', [exact('deezer')]]]));
-    expect(corpus.recordings[0]?.previewUrl).toBeNull();
+  it('drops a Deezer match that has no preview', () => {
+    const corpus = buildCorpusData(
+      [rec('r1', 'a1')],
+      new Map([['r1', [{ ...exact('deezer'), previewUrl: null }]]]),
+    );
+    expect(corpus.recordings).toHaveLength(0);
+  });
+
+  it('keeps a song with a preview but no cover art (cover null)', () => {
+    const corpus = buildCorpusData(
+      [rec('r1', 'a1')],
+      new Map([['r1', [{ ...exact('deezer'), coverArtUrl: null }]]]),
+    );
+    expect(corpus.recordings).toHaveLength(1);
     expect(corpus.recordings[0]?.coverArtUrl).toBeNull();
+    expect(corpus.recordings[0]?.previewUrl).toBe('/preview/123');
   });
 
   it('fills year from the exact link when MusicBrainz has none, but MB year wins', () => {
