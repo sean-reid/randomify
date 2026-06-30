@@ -17,12 +17,17 @@ test('shows a song with player and links on load', async ({ page }, testInfo) =>
 
   await expect(page.getByRole('heading', { name: 'randomify' })).toBeVisible();
   await expect(page.getByTestId('title')).toHaveText(SAMPLE_SPIN.song.title);
-  await expect(page.getByText(SAMPLE_SPIN.song.artist)).toBeVisible();
+  // exact: the artist line, not the visually-hidden "<title> by <artist>" status.
+  await expect(page.getByText(SAMPLE_SPIN.song.artist, { exact: true })).toBeVisible();
 
   // Player surfaces when the song has a preview.
   await expect(page.getByTestId('controls')).toBeVisible();
   await expect(page.getByTestId('playpause')).toBeVisible();
   await expect(page.getByTestId('player-audio')).toBeAttached();
+  // Screen-reader status announces the current song.
+  await expect(page.getByTestId('status')).toHaveText(
+    `${SAMPLE_SPIN.song.title} by ${SAMPLE_SPIN.song.artist}`,
+  );
 
   const links = page.getByTestId('links').getByRole('link');
   await expect(links).toHaveCount(SAMPLE_SPIN.links.length);

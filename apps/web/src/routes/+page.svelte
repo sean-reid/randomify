@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { PLATFORM_BY_ID, type Song, type SpinResponse } from '@randomify/shared';
   import { spin } from '$lib/api';
   import { RecentArtists } from '$lib/recent';
@@ -18,6 +18,12 @@
   // gesture primes the element (a muted play/pause) to bless later autoplay.
   let primed = false;
 
+  // Bumped on every song change / pause so a late play()/fade promise from a
+  // previous track can detect it is stale and bail instead of fighting volume.
+  let playToken = 0;
+  // Cap the deck so a long session does not grow history unbounded.
+  const HISTORY_CAP = 60;
+
   const recent = new RecentArtists();
   let prefetched: Promise<SpinResponse> | null = null;
 
@@ -25,13 +31,30 @@
   const song = $derived(current?.song ?? null);
   const canPrev = $derived(index > 0);
 
+  // Concise screen-reader status: announced on song change / error, instead of
+  // making the whole card a live region (which re-reads everything each spin).
+  const status = $derived(
+    song ? `${song.title} by ${song.artist}${playerError ? ', preview unavailable' : ''}` : '',
+  );
+
   let fadeTimer: ReturnType<typeof setInterval> | undefined;
+
+  function prefersReducedMotion(): boolean {
+    return (
+      typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches
+    );
+  }
 
   /** Ramp the audio volume toward `target`; pause once it reaches silence. */
   function fadeTo(target: number, ms = 300): void {
     const el = audioEl;
     if (!el) return;
     clearInterval(fadeTimer);
+    if (prefersReducedMotion()) {
+      el.volume = target;
+      if (target === 0) el.pause();
+      return;
+    }
     const start = el.volume;
     const steps = 15;
     let i = 0;
@@ -45,14 +68,19 @@
     }, ms / steps);
   }
 
-  /** Play from silence and fade in; restore volume if autoplay is blocked. */
+  /** Play from silence and fade in; restore volume if autoplay is blocked.
+   * Captures the current token so a late resolve on a superseded track no-ops. */
   function playFadeIn(): void {
     const el = audioEl;
     if (!el) return;
+    const token = playToken;
     el.volume = 0;
     el.play().then(
-      () => fadeTo(1),
       () => {
+        if (token === playToken) fadeTo(1);
+      },
+      () => {
+        if (token !== playToken) return;
         el.volume = 1;
         playing = false;
       },
@@ -154,7 +182,8 @@
         error = 'Could not find a playable song. Try shuffling again.';
         return;
       }
-      history = [...history.slice(0, index + 1), result];
+      const deck = [...history.slice(0, index + 1), result];
+      history = deck.length > HISTORY_CAP ? deck.slice(deck.length - HISTORY_CAP) : deck;
       index = history.length - 1;
       recent.add(result.song.artistId);
       // Warm the next spin and preload its cover so the next discover is instant.
@@ -179,9 +208,12 @@
   }
 
   function togglePlay(): void {
-    if (!audioEl || !song?.previewUrl) return;
+    if (!audioEl || !song?.previewUrl || playerError) return;
     if (audioEl.paused) playFadeIn();
-    else fadeTo(0, 200);
+    else {
+      playToken += 1; // a pending play() must not re-start after a manual pause
+      fadeTo(0, 200);
+    }
   }
 
   // Autoplay each new song's preview with a short fade-in. Re-runs when the song
@@ -191,23 +223,31 @@
     const url = song?.previewUrl ?? null;
     song?.recordingId;
     if (!audioEl) return;
+    playToken += 1; // new track: supersede any in-flight play()/fade
     playerError = false;
     if (url) playFadeIn();
     else audioEl.pause();
   });
 
+  onDestroy(() => clearInterval(fadeTimer));
+
   let touchX = 0;
   let touchY = 0;
+  let touchAt = 0;
   function onTouchStart(event: TouchEvent): void {
     const t = event.changedTouches[0];
     touchX = t.clientX;
     touchY = t.clientY;
+    touchAt = event.timeStamp;
   }
   function onTouchEnd(event: TouchEvent): void {
     const t = event.changedTouches[0];
     const dx = t.clientX - touchX;
     const dy = t.clientY - touchY;
-    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) {
+    const dt = event.timeStamp - touchAt;
+    // A deliberate horizontal flick: far enough, mostly horizontal, and quick
+    // enough that a slow drag / text-selection / press does not navigate.
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5 && dt < 600) {
       unlockAudio();
       if (dx < 0) next();
       else prev();
@@ -216,8 +256,12 @@
 
   function onKeydown(event: KeyboardEvent): void {
     const target = event.target as HTMLElement | null;
-    if (target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA') return;
+    if (target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable)
+      return;
     if (event.code === 'Space') {
+      // If a control button is focused, let its native activation handle Space
+      // (avoids a double toggle from this window handler + the button click).
+      if (target?.tagName === 'BUTTON') return;
       event.preventDefault();
       unlockAudio();
       togglePlay();
@@ -239,6 +283,11 @@
 
   function initial(s: Song): string {
     return s.artist.trim().charAt(0).toUpperCase() || '?';
+  }
+
+  /** Defense-in-depth: never render a non-https link href from corpus data. */
+  function safeUrl(url: string): string {
+    return url.startsWith('https://') ? url : '#';
   }
 
   onMount(() => {
@@ -287,7 +336,9 @@
     >
   {/snippet}
 
-  <section class="stage" aria-live="polite">
+  <p class="sr-only" aria-live="polite" data-testid="status">{status}</p>
+
+  <section class="stage">
     {#if current}
       {@const song = current.song}
       <article
@@ -296,7 +347,7 @@
         ontouchstart={onTouchStart}
         ontouchend={onTouchEnd}
       >
-        {#if song.previewUrl && !playerError}
+        {#if song.previewUrl}
           <button
             class="cover cover-btn"
             onclick={togglePlay}
@@ -357,7 +408,7 @@
           {#each current.links as link (link.platform)}
             <li>
               <a
-                href={link.url}
+                href={safeUrl(link.url)}
                 target="_blank"
                 rel="noopener noreferrer"
                 title={link.kind === 'search_fallback'
@@ -371,7 +422,7 @@
         </ul>
       </article>
     {:else if error}
-      <p class="error" data-testid="error">{error}</p>
+      <p class="error" role="alert" data-testid="error">{error}</p>
     {:else}
       <div class="card placeholder" aria-hidden="true">
         <div class="cover"></div>
@@ -383,7 +434,7 @@
 
   <audio
     bind:this={audioEl}
-    src={song?.previewUrl ?? ''}
+    src={song?.previewUrl ?? undefined}
     onplay={() => {
       playing = true;
       primed = true;
@@ -391,9 +442,11 @@
     onpause={() => (playing = false)}
     onended={() => {
       playing = false;
-      // Real Deezer previews are ~30s; advance only on a real-length clip so a
-      // degenerate or empty source can't drive a runaway skip loop.
-      if (audioEl && audioEl.duration >= 5) next();
+      // Advance on natural end of a real clip. Guard against a degenerate
+      // finite-but-tiny source driving a runaway skip; a NaN/unknown duration
+      // that still fired `ended` is treated as a real end (don't dead-end).
+      const d = audioEl?.duration ?? 0;
+      if (audioEl && (!Number.isFinite(d) || d >= 5)) next();
     }}
     onerror={onPreviewError}
     preload="metadata"
@@ -451,6 +504,19 @@
     justify-content: center;
   }
 
+  /* Visually hidden but available to screen readers (the live status node). */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
   .card {
     width: 100%;
     background: var(--surface);
@@ -459,6 +525,8 @@
     padding: 1.75rem 1.5rem 1.5rem;
     text-align: center;
     box-shadow: 0 1px 2px rgba(20, 20, 20, 0.04);
+    /* Allow vertical scroll; horizontal is our swipe-to-navigate gesture. */
+    touch-action: pan-y;
   }
 
   .cover {
