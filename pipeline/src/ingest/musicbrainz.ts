@@ -13,9 +13,9 @@ import type { NormalizedRecording } from './ingest.js';
  * so columns are referenced by position. The indices below follow the
  * documented MusicBrainz schema; verify against a real dump on the first run.
  *
- * Genres are not in the core dump (they live in the derived dump), so genres
- * come back empty here and are wired in a later pass; the sampler tolerates an
- * empty genre facet.
+ * Year (release_group_meta) and genres (genre/tag tables) live in the DERIVED
+ * dump. When those tables are present they are joined in; when absent (core-only
+ * dump) year is null and genres are empty, and the sampler tolerates that.
  */
 // alias -> selected columns, referenced by stable ordinal names c0, c1, ...
 // (assigned below regardless of the file's total column count). The indices
@@ -32,11 +32,16 @@ const TABLES: Record<string, string> = {
   release_group_meta: 'c0::BIGINT AS id, TRY_CAST(c2 AS INT) AS first_year',
   area: 'c0::BIGINT AS id, c2 AS name',
   language: 'c0::BIGINT AS id, c6 AS iso3',
+  // Genre tables (derived dump): genre is the canonical genre list, tag maps
+  // ids to names, rgt links release groups to tags with a vote count.
+  genre: 'c2 AS name',
+  tag: 'c0::BIGINT AS id, c1 AS name',
+  rgt: 'c0::BIGINT AS rg, c1::BIGINT AS tag, TRY_CAST(c2 AS INT) AS count',
 };
 
-// Tables that may be absent from a core-only dump (release_group_meta lives in
-// the derived dump). Missing optional tables become empty, yielding null years.
-const OPTIONAL = new Set(['release_group_meta']);
+// Tables absent from a core-only dump (they live in the derived dump). Missing
+// optional tables become empty, yielding null years and no genres.
+const OPTIONAL = new Set(['release_group_meta', 'genre', 'tag', 'rgt']);
 
 /** Dump file name for each alias (mbdump table names). */
 const FILES: Record<string, string> = {
@@ -51,6 +56,9 @@ const FILES: Record<string, string> = {
   release_group_meta: 'release_group_meta',
   area: 'area',
   language: 'language',
+  genre: 'genre',
+  tag: 'tag',
+  rgt: 'release_group_tag',
 };
 
 const EXTRACT_SQL = `
@@ -75,6 +83,19 @@ chosen AS (
            row_number() OVER (PARTITION BY recording ORDER BY yr, rg) AS rn
     FROM rec_rg
   ) WHERE rn = 1
+),
+rg_genre AS (
+  -- Top genres per release group: tags whose name is a known genre, most-voted
+  -- first, joined with chr(1) so the JS side can split them back into an array.
+  SELECT rg, string_agg(name, chr(1) ORDER BY cnt DESC, name) AS genres FROM (
+    SELECT rgt.rg AS rg, t.name AS name, rgt.count AS cnt,
+           row_number() OVER (PARTITION BY rgt.rg ORDER BY rgt.count DESC, t.name) AS rn
+    FROM rgt
+    JOIN tag t ON t.id = rgt.tag
+    JOIN genre g ON lower(g.name) = lower(t.name)
+    WHERE COALESCE(rgt.count, 0) > 0
+  ) WHERE rn <= 3
+  GROUP BY rg
 )
 SELECT
   rec.gid AS recordingId,
@@ -87,7 +108,8 @@ SELECT
   rec.length AS durationMs,
   isrc1.isrc AS isrc,
   ar.name AS country,
-  lng.iso3 AS language
+  lng.iso3 AS language,
+  rgg.genres AS genres
 FROM rec
 JOIN isrc1 ON isrc1.recording = rec.id
 JOIN primary_artist pa ON pa.artist_credit = rec.artist_credit
@@ -96,6 +118,7 @@ LEFT JOIN area ar ON ar.id = art.area
 JOIN chosen ON chosen.recording = rec.id
 JOIN release_group rg ON rg.id = chosen.rg
 LEFT JOIN language lng ON lng.id = chosen.lang
+LEFT JOIN rg_genre rgg ON rgg.rg = chosen.rg
 ORDER BY rec.gid
 `;
 
@@ -165,6 +188,6 @@ export async function extractMusicBrainz(
     isrc: str(row.isrc),
     country: str(row.country),
     language: str(row.language),
-    genres: [],
+    genres: row.genres ? String(row.genres).split('\u0001') : [],
   }));
 }
