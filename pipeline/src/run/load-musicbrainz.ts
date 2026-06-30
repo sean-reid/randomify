@@ -1,5 +1,5 @@
-import { Client } from 'pg';
 import { extractMusicBrainz } from '../ingest/musicbrainz.js';
+import { createLoadClient } from './db.js';
 import { runPipeline } from './pipeline.js';
 import { PostgresResolutionCache } from './postgres-cache.js';
 
@@ -20,17 +20,12 @@ if (!dumpDir || !databaseUrl) {
   process.exit(1);
 }
 
-const pg = new Client({ connectionString: databaseUrl });
-await pg.connect();
+const client = createLoadClient(databaseUrl);
 try {
   const limit = process.env.LIMIT ? Number(process.env.LIMIT) : undefined;
   const extractLimit = process.env.MB_EXTRACT_LIMIT
     ? Number(process.env.MB_EXTRACT_LIMIT)
     : undefined;
-  const client = {
-    query: (sql: string, params?: unknown[]) =>
-      pg.query(sql, params).then((r) => ({ rows: r.rows })),
-  };
   const cache = new PostgresResolutionCache(client);
   await cache.init();
   const summary = await runPipeline({
@@ -43,5 +38,5 @@ try {
   });
   console.log(JSON.stringify(summary, null, 2));
 } finally {
-  await pg.end();
+  await client.close();
 }

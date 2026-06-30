@@ -1,6 +1,6 @@
-import { Client } from 'pg';
 import { extractMusicBrainz } from '../ingest/musicbrainz.js';
 import { populateBacklog } from './backlog.js';
+import { createLoadClient } from './db.js';
 import { optionalIntEnv } from './env.js';
 
 /**
@@ -20,18 +20,13 @@ if (!dumpDir || !databaseUrl) {
 }
 const candidateLimit = optionalIntEnv('MB_CANDIDATE_LIMIT');
 
-const pg = new Client({ connectionString: databaseUrl });
-await pg.connect();
+const client = createLoadClient(databaseUrl);
 try {
-  const client = {
-    query: (sql: string, params?: unknown[]) =>
-      pg.query(sql, params).then((r) => ({ rows: r.rows })),
-  };
   const recordings = await extractMusicBrainz(dumpDir, candidateLimit);
   await populateBacklog(client, recordings);
   console.log(
     JSON.stringify({ candidates: recordings.length, cap: candidateLimit ?? null }, null, 2),
   );
 } finally {
-  await pg.end();
+  await client.close();
 }

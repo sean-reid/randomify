@@ -1,4 +1,4 @@
-import { applySchema, insertWeights, type SqlClient } from '../corpus/export.js';
+import { applySchema, insertWeights, withTransaction, type SqlClient } from '../corpus/export.js';
 import { buildWeights, type StreamableRecording } from '../corpus/weights.js';
 
 function decadeOf(year: number | null): string | null {
@@ -31,17 +31,12 @@ export async function rebuildWeights(client: SqlClient): Promise<{ recordings: n
 
   const weights = buildWeights(streamable);
 
-  await client.query('BEGIN');
-  try {
-    await client.query(
+  await withTransaction(client, async (tx) => {
+    await tx.query(
       'TRUNCATE facet_value, facet_artist, artist_release_group, release_group_recording',
     );
-    await insertWeights(client, weights);
-    await client.query('COMMIT');
-  } catch (error) {
-    await client.query('ROLLBACK');
-    throw error;
-  }
+    await insertWeights(tx, weights);
+  });
 
   return { recordings: streamable.length };
 }

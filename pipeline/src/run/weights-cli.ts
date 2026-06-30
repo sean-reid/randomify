@@ -1,4 +1,4 @@
-import { Client } from 'pg';
+import { createLoadClient } from './db.js';
 import { rebuildWeights } from './rebuild-weights.js';
 
 /**
@@ -13,15 +13,10 @@ if (!databaseUrl) {
   process.exit(1);
 }
 
-const pg = new Client({ connectionString: databaseUrl });
-await pg.connect();
+const client = createLoadClient(databaseUrl);
 try {
-  const client = {
-    query: (sql: string, params?: unknown[]) =>
-      pg.query(sql, params).then((r) => ({ rows: r.rows })),
-  };
   const summary = await rebuildWeights(client);
   console.log(JSON.stringify(summary, null, 2));
 } finally {
-  await pg.end();
+  await client.close();
 }

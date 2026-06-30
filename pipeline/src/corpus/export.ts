@@ -6,6 +6,35 @@ import type { CorpusWeights } from './weights.js';
 /** Minimal Postgres client surface, satisfied by node-postgres and PGlite. */
 export interface SqlClient {
   query(sql: string, params?: unknown[]): Promise<{ rows: Record<string, unknown>[] }>;
+  /**
+   * Optionally run `fn` inside a transaction pinned to a single connection. A
+   * pooled client MUST implement this so BEGIN/COMMIT do not scatter across
+   * connections; a single-connection client (one node-postgres Client, PGlite)
+   * may omit it and `withTransaction` falls back to issuing BEGIN/COMMIT inline.
+   */
+  transaction?<T>(fn: (tx: SqlClient) => Promise<T>): Promise<T>;
+}
+
+/**
+ * Run `fn` as a transaction. With a pooled client this pins one connection (so
+ * the whole BEGIN..COMMIT runs on it); otherwise it brackets `fn` with inline
+ * BEGIN/COMMIT and rolls back on error. The serving corpus stays consistent for
+ * readers either way: they see the previous contents until COMMIT.
+ */
+export async function withTransaction<T>(
+  client: SqlClient,
+  fn: (tx: SqlClient) => Promise<T>,
+): Promise<T> {
+  if (client.transaction) return client.transaction(fn);
+  await client.query('BEGIN');
+  try {
+    const result = await fn(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  }
 }
 
 export interface CorpusArtist {
@@ -86,12 +115,11 @@ function insertRows(
  */
 export async function exportCorpus(client: SqlClient, data: CorpusData): Promise<void> {
   await applySchema(client);
-  await client.query('BEGIN');
-  try {
-    await client.query(`TRUNCATE ${CORPUS_TABLES.join(', ')}`);
+  await withTransaction(client, async (tx) => {
+    await tx.query(`TRUNCATE ${CORPUS_TABLES.join(', ')}`);
 
     await insertRows(
-      client,
+      tx,
       'artist',
       [
         { name: 'id', type: 'text' },
@@ -101,7 +129,7 @@ export async function exportCorpus(client: SqlClient, data: CorpusData): Promise
       data.artists.map((a) => [a.id, a.name, a.country]),
     );
     await insertRows(
-      client,
+      tx,
       'release_group',
       [
         { name: 'id', type: 'text' },
@@ -112,7 +140,7 @@ export async function exportCorpus(client: SqlClient, data: CorpusData): Promise
       data.releaseGroups.map((rg) => [rg.id, rg.artistId, rg.title, rg.year]),
     );
     await insertRows(
-      client,
+      tx,
       'recording',
       [
         { name: 'id', type: 'text' },
@@ -142,7 +170,7 @@ export async function exportCorpus(client: SqlClient, data: CorpusData): Promise
       ]),
     );
     await insertRows(
-      client,
+      tx,
       'platform_link',
       [
         { name: 'recording_id', type: 'text' },
@@ -153,13 +181,8 @@ export async function exportCorpus(client: SqlClient, data: CorpusData): Promise
       ],
       data.links.map((l) => [l.recordingId, l.platform, l.url, l.kind, l.confidence]),
     );
-    await insertWeights(client, data.weights);
-
-    await client.query('COMMIT');
-  } catch (error) {
-    await client.query('ROLLBACK');
-    throw error;
-  }
+    await insertWeights(tx, data.weights);
+  });
 }
 
 /** Insert the four tempered prefix-sum weight index tables. */
