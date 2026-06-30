@@ -1,10 +1,11 @@
-name = "randomify-api"
+name = "randomify-api-dev"
 main = "src/index.ts"
 compatibility_date = "2025-06-01"
 compatibility_flags = ["nodejs_compat"]
 
-# The default environment is the deployed dev API, used by PR previews and the
-# stable randomify-dev domain. Local `wrangler dev` ignores routes.
+# The default (top-level) environment is the deployed dev API, used by PR
+# previews and the stable randomify-dev domain. Local `wrangler dev` ignores
+# routes.
 routes = [{ pattern = "api.randomify-dev.dwainosaur.com", custom_domain = true }]
 
 # The corpus lives in Neon Postgres, reached from the Worker through Hyperdrive.
