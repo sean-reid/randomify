@@ -2,8 +2,8 @@
 # Shared helpers for the randomify Mac cron jobs. Sourced by each per-job script.
 #
 # Provides: repo-root resolution, a launchd-safe PATH, per-env config loading,
-# and run_job() - a wrapper that adds a flock guard, healthchecks.io heartbeat
-# pings, and a phone (ntfy) + local failure alert around the job body.
+# and run_job() - a wrapper that adds a single-run lock, healthchecks.io
+# heartbeat pings, and a phone (ntfy) + local failure alert around the job body.
 
 # Repo root: scripts/ lives directly under it.
 RANDOMIFY_REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -49,18 +49,49 @@ notify() {
   osascript -e "display notification \"$message\" with title \"$title\"" >/dev/null 2>&1 || true
 }
 
-# run_job <env> <name> <fn> - run job function <fn> under a per-job flock (so jobs
-# of different cadence never block each other), bracketed by heartbeat pings, with
-# a phone + local alert on failure. The job function may set its own EXIT trap
-# (e.g. refresh's scratch cleanup); it still fires on the failure exit below.
+# Lock dir for the running job; released (with any job_cleanup) on exit.
+_LOCKDIR=""
+
+# Release the lock and run a job-defined `job_cleanup` if present. Bound to EXIT.
+_cleanup_job() {
+  if declare -F job_cleanup >/dev/null; then job_cleanup || true; fi
+  [ -n "$_LOCKDIR" ] && rm -rf "$_LOCKDIR" 2>/dev/null
+  return 0
+}
+
+# acquire_lock <dir> - atomic mkdir lock (portable; macOS has no flock). Reclaims
+# a stale lock left by a crashed run whose PID is no longer alive.
+acquire_lock() {
+  local dir="$1"
+  if mkdir "$dir" 2>/dev/null; then
+    echo $$ >"$dir/pid"
+    return 0
+  fi
+  local pid
+  pid="$(cat "$dir/pid" 2>/dev/null || true)"
+  if [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null; then
+    rm -rf "$dir"
+    if mkdir "$dir" 2>/dev/null; then
+      echo $$ >"$dir/pid"
+      return 0
+    fi
+  fi
+  return 1
+}
+
+# run_job <env> <name> <fn> - run job function <fn> under a single-run lock (so a
+# job never overlaps itself), bracketed by heartbeat pings, with a phone + local
+# alert on failure. A job may define a `job_cleanup` function (e.g. refresh's
+# scratch removal); it runs on exit alongside releasing the lock.
 run_job() {
   local env="$1" name="$2" fn="$3"
-  local lock="$RANDOMIFY_REPO/data/musicbrainz/.$name-$env.lock"
-  exec 9>"$lock"
-  if ! flock -n 9; then
+  _LOCKDIR="$RANDOMIFY_REPO/data/musicbrainz/.$name-$env.lock"
+  if ! acquire_lock "$_LOCKDIR"; then
     echo "[$name/$env] already running, skipping" >&2
+    _LOCKDIR=""
     exit 0
   fi
+  trap _cleanup_job EXIT
   # Use a per-job healthcheck if set (HEALTHCHECK_URL_REFRESH / _RESOLVE /
   # _WEIGHTS) so each cadence gets its own check; else fall back to the shared
   # HEALTHCHECK_URL (fine when an env runs a single job, e.g. dev load-small).
