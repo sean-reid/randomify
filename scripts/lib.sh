@@ -61,6 +61,11 @@ run_job() {
     echo "[$name/$env] already running, skipping" >&2
     exit 0
   fi
+  # Use a per-job healthcheck if set (HEALTHCHECK_URL_REFRESH / _RESOLVE /
+  # _WEIGHTS) so each cadence gets its own check; else fall back to the shared
+  # HEALTHCHECK_URL (fine when an env runs a single job, e.g. dev load-small).
+  local jobvar="HEALTHCHECK_URL_$(echo "$name" | tr '[:lower:]' '[:upper:]')"
+  HEALTHCHECK_URL="${!jobvar:-${HEALTHCHECK_URL:-}}"
   hc /start
   if "$fn"; then
     hc
