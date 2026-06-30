@@ -95,6 +95,9 @@ importers:
         specifier: workspace:*
         version: link:../packages/shared
     devDependencies:
+      '@electric-sql/pglite':
+        specifier: ^0.5.3
+        version: 0.5.3
       vitest:
         specifier: ^3.2.4
         version: 3.2.6(@types/node@24.13.2)
@@ -200,6 +203,9 @@ packages:
 
   '@duckdb/node-bindings@1.5.4-r.1':
     resolution: {integrity: sha512-v834OZZKQ59yAvh8GOEmM+R1foPNgdMGL0VTBgHywgblgQNyq11HvWgT4QGJIUFfo/cQ9WFyf1MFhK0+hV1aiA==}
+
+  '@electric-sql/pglite@0.5.3':
+    resolution: {integrity: sha512-iTTYbA5Uesrl+N7zss0J5LopT7KE4j9aymYo+EZZh+rZbARQCUQOs+n2pay64JRUpc3fCkpfrniTNJnvYzOE+g==}
 
   '@emnapi/runtime@1.11.1':
     resolution: {integrity: sha512-vgj7R3y3Wgx24IQaGPA/R6YFXLHVMOZ0uVEyIQPaWs+rd1AzfEMXlAC22FYwO1XkKR6NPsq7mUandH8oIRdZFw==}
@@ -1942,6 +1948,8 @@ snapshots:
       '@duckdb/node-bindings-linux-x64-musl': 1.5.4-r.1
       '@duckdb/node-bindings-win32-arm64': 1.5.4-r.1
       '@duckdb/node-bindings-win32-x64': 1.5.4-r.1
+
+  '@electric-sql/pglite@0.5.3': {}
 
   '@emnapi/runtime@1.11.1':
     dependencies:

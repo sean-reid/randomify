@@ -1,0 +1,190 @@
+import type { LinkKind, PlatformId } from '@randomify/shared';
+import { CORPUS_TABLES, SCHEMA_SQL } from './schema.js';
+import type { CorpusWeights } from './weights.js';
+
+/** Minimal Postgres client surface, satisfied by node-postgres and PGlite. */
+export interface SqlClient {
+  query(sql: string, params?: unknown[]): Promise<{ rows: Record<string, unknown>[] }>;
+  /** Optional multi-statement runner (PGlite). */
+  exec?(sql: string): Promise<unknown>;
+}
+
+export interface CorpusArtist {
+  id: string;
+  name: string;
+  country: string | null;
+}
+export interface CorpusReleaseGroup {
+  id: string;
+  artistId: string;
+  title: string;
+  year: number | null;
+}
+export interface CorpusRecording {
+  id: string;
+  artistId: string;
+  releaseGroupId: string;
+  title: string;
+  isrc: string | null;
+  durationMs: number | null;
+  year: number | null;
+  language: string | null;
+  coverArtUrl: string | null;
+  genres: string[];
+}
+export interface CorpusLink {
+  recordingId: string;
+  platform: PlatformId;
+  url: string;
+  kind: LinkKind;
+  confidence: number;
+}
+
+export interface CorpusData {
+  artists: CorpusArtist[];
+  releaseGroups: CorpusReleaseGroup[];
+  recordings: CorpusRecording[];
+  links: CorpusLink[];
+  weights: CorpusWeights;
+}
+
+async function run(client: SqlClient, sql: string): Promise<void> {
+  if (client.exec) await client.exec(sql);
+  else await client.query(sql);
+}
+
+/** Format a string list as a Postgres array literal, e.g. {"bossa nova","jazz"}. */
+function toPgArray(items: string[]): string {
+  return `{${items.map((s) => `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`).join(',')}}`;
+}
+
+/** Create the corpus tables if they do not exist. */
+export async function applySchema(client: SqlClient): Promise<void> {
+  await run(client, SCHEMA_SQL);
+}
+
+const CHUNK = 500;
+
+/** Batched multi-row INSERT. */
+async function insertRows(
+  client: SqlClient,
+  table: string,
+  columns: string[],
+  rows: readonly unknown[][],
+): Promise<void> {
+  for (let start = 0; start < rows.length; start += CHUNK) {
+    const chunk = rows.slice(start, start + CHUNK);
+    const params: unknown[] = [];
+    const tuples = chunk.map((values) => {
+      const placeholders = values.map((value) => {
+        params.push(value);
+        return `$${params.length}`;
+      });
+      return `(${placeholders.join(', ')})`;
+    });
+    await client.query(
+      `INSERT INTO ${table} (${columns.join(', ')}) VALUES ${tuples.join(', ')}`,
+      params,
+    );
+  }
+}
+
+/**
+ * Rebuild the serving corpus in a single transaction: truncate every table and
+ * reload it. Other readers keep seeing the previous corpus until commit (MVCC),
+ * so the swap is atomic and never exposes a half-built state.
+ */
+export async function exportCorpus(client: SqlClient, data: CorpusData): Promise<void> {
+  await applySchema(client);
+  await run(client, 'BEGIN');
+  try {
+    await client.query(`TRUNCATE ${CORPUS_TABLES.join(', ')}`);
+
+    await insertRows(
+      client,
+      'artist',
+      ['id', 'name', 'country'],
+      data.artists.map((a) => [a.id, a.name, a.country]),
+    );
+    await insertRows(
+      client,
+      'release_group',
+      ['id', 'artist_id', 'title', 'year'],
+      data.releaseGroups.map((rg) => [rg.id, rg.artistId, rg.title, rg.year]),
+    );
+    await insertRows(
+      client,
+      'recording',
+      [
+        'id',
+        'artist_id',
+        'release_group_id',
+        'title',
+        'isrc',
+        'duration_ms',
+        'year',
+        'language',
+        'cover_art_url',
+        'genres',
+      ],
+      data.recordings.map((r) => [
+        r.id,
+        r.artistId,
+        r.releaseGroupId,
+        r.title,
+        r.isrc,
+        r.durationMs,
+        r.year,
+        r.language,
+        r.coverArtUrl,
+        toPgArray(r.genres),
+      ]),
+    );
+    await insertRows(
+      client,
+      'platform_link',
+      ['recording_id', 'platform', 'url', 'kind', 'confidence'],
+      data.links.map((l) => [l.recordingId, l.platform, l.url, l.kind, l.confidence]),
+    );
+    await insertRows(
+      client,
+      'facet_value',
+      ['facet_type', 'facet_id', 'weight', 'cum_weight'],
+      data.weights.facetValues.map((f) => [f.facetType, f.facetId, f.weight, f.cumWeight]),
+    );
+    await insertRows(
+      client,
+      'facet_artist',
+      ['facet_type', 'facet_id', 'artist_id', 'weight', 'cum_weight'],
+      data.weights.facetArtists.map((f) => [
+        f.facetType,
+        f.facetId,
+        f.artistId,
+        f.weight,
+        f.cumWeight,
+      ]),
+    );
+    await insertRows(
+      client,
+      'artist_release_group',
+      ['artist_id', 'release_group_id', 'weight', 'cum_weight'],
+      data.weights.artistReleaseGroups.map((a) => [
+        a.artistId,
+        a.releaseGroupId,
+        a.weight,
+        a.cumWeight,
+      ]),
+    );
+    await insertRows(
+      client,
+      'release_group_recording',
+      ['release_group_id', 'recording_id', 'cum_index'],
+      data.weights.releaseGroupRecordings.map((r) => [r.releaseGroupId, r.recordingId, r.cumIndex]),
+    );
+
+    await run(client, 'COMMIT');
+  } catch (error) {
+    await run(client, 'ROLLBACK');
+    throw error;
+  }
+}
