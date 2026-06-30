@@ -8,7 +8,7 @@ import {
   type Song,
   type Weighted,
 } from '@randomify/shared';
-import type { CorpusProvider } from './corpus.js';
+import type { CorpusProvider, SpinInput, SpinPick } from './corpus.js';
 
 /** A demo song carries the facet attributes the sampler walks down. */
 interface DemoSong {
@@ -262,43 +262,68 @@ export class DemoCorpusProvider implements CorpusProvider {
     return Promise.resolve();
   }
 
-  pickFacetValue(facet: Facet, r: number): Promise<string | null> {
-    return Promise.resolve(pick(tally(DEMO_SONGS.flatMap((s) => facetValuesOf(s, facet))), r));
-  }
+  /** Resolve a whole walk in memory, mirroring the Postgres provider: pick a
+   * facet value, redraw the artist to avoid recent ones, then the release group
+   * and recording, and assemble the song with its search-fallback links. */
+  spin(input: SpinInput): Promise<SpinPick | null> {
+    const facetValue = this.pickFacetValue(input.facet, input.facetDraw);
+    if (!facetValue) return Promise.resolve(null);
 
-  pickArtist(facet: Facet, facetValue: string, r: number): Promise<string | null> {
-    const inFacet = DEMO_SONGS.filter((s) => facetValuesOf(s, facet).includes(facetValue));
-    return Promise.resolve(
-      pick(
-        weightedByKey(inFacet, (s) => s.artistId),
-        r,
-      ),
-    );
-  }
+    const artistId = this.pickArtist(input.facet, facetValue, input.artistDraws, input.exclude);
+    if (!artistId) return Promise.resolve(null);
 
-  pickReleaseGroup(artistId: string, r: number): Promise<string | null> {
-    const songs = DEMO_SONGS.filter((s) => s.artistId === artistId);
-    return Promise.resolve(
-      pick(
-        weightedByKey(songs, (s) => s.releaseGroupId),
-        r,
-      ),
-    );
-  }
+    const releaseGroupId = this.pickReleaseGroup(artistId, input.releaseGroupDraw);
+    if (!releaseGroupId) return Promise.resolve(null);
 
-  pickRecording(releaseGroupId: string, r: number): Promise<string | null> {
-    const songs = DEMO_SONGS.filter((s) => s.releaseGroupId === releaseGroupId);
-    return Promise.resolve(
-      pick(
-        songs.map((s) => ({ value: s.recordingId, descendantCount: 1 })),
-        r,
-      ),
-    );
-  }
+    const recordingId = this.pickRecording(releaseGroupId, input.recordingDraw);
+    if (!recordingId) return Promise.resolve(null);
 
-  loadSong(recordingId: string): Promise<Song> {
     const s = this.require(recordingId);
-    return Promise.resolve({
+    return Promise.resolve({ song: this.toSong(s), links: this.toLinks(s) });
+  }
+
+  private pickFacetValue(facet: Facet, r: number): string | null {
+    return pick(tally(DEMO_SONGS.flatMap((s) => facetValuesOf(s, facet))), r);
+  }
+
+  /** Walk each artist draw; prefer the first landing on a non-excluded artist,
+   * else keep the last drawn so a spin still resolves. */
+  private pickArtist(
+    facet: Facet,
+    facetValue: string,
+    draws: number[],
+    exclude: ReadonlySet<string>,
+  ): string | null {
+    const inFacet = DEMO_SONGS.filter((s) => facetValuesOf(s, facet).includes(facetValue));
+    const candidates = weightedByKey(inFacet, (s) => s.artistId);
+    let chosen: string | null = null;
+    for (const r of draws) {
+      const candidate = pick(candidates, r);
+      if (!candidate) break;
+      chosen = candidate;
+      if (!exclude.has(candidate)) break;
+    }
+    return chosen;
+  }
+
+  private pickReleaseGroup(artistId: string, r: number): string | null {
+    const songs = DEMO_SONGS.filter((s) => s.artistId === artistId);
+    return pick(
+      weightedByKey(songs, (s) => s.releaseGroupId),
+      r,
+    );
+  }
+
+  private pickRecording(releaseGroupId: string, r: number): string | null {
+    const songs = DEMO_SONGS.filter((s) => s.releaseGroupId === releaseGroupId);
+    return pick(
+      songs.map((s) => ({ value: s.recordingId, descendantCount: 1 })),
+      r,
+    );
+  }
+
+  private toSong(s: DemoSong): Song {
+    return {
       recordingId: s.recordingId,
       title: s.title,
       artist: s.artist,
@@ -311,12 +336,11 @@ export class DemoCorpusProvider implements CorpusProvider {
       coverArtUrl: s.coverArtUrl ?? null,
       previewUrl: s.previewUrl ?? null,
       genres: s.genres,
-    });
+    };
   }
 
-  links(recordingId: string): Promise<PlatformLink[]> {
-    const s = this.require(recordingId);
-    return Promise.resolve(PLATFORMS.map((p) => searchLink(p.id, s.artist, s.title)));
+  private toLinks(s: DemoSong): PlatformLink[] {
+    return PLATFORMS.map((p) => searchLink(p.id, s.artist, s.title));
   }
 
   private require(recordingId: string): DemoSong {
