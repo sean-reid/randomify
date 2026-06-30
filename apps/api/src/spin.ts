@@ -1,4 +1,4 @@
-import { pickFacet, type Rng, type SpinResponse } from '@randomify/shared';
+import { FACETS, pickFacet, type Facet, type Rng, type SpinResponse } from '@randomify/shared';
 import type { CorpusProvider } from './corpus.js';
 
 export interface SpinOptions {
@@ -10,6 +10,24 @@ export interface SpinOptions {
 
 /** How many times to redraw an artist before accepting a recently seen one. */
 const ANTI_REPEAT_ATTEMPTS = 8;
+
+/**
+ * Pick a facet that actually has values, starting from a random one and falling
+ * through the rest. Lets a partially-populated corpus (e.g. no genres yet)
+ * still resolve every spin instead of failing when an empty facet is chosen.
+ */
+async function chooseFacet(
+  corpus: CorpusProvider,
+  rng: Rng,
+): Promise<{ facet: Facet; facetValue: string }> {
+  const start = pickFacet(rng);
+  const ordered: Facet[] = [start, ...FACETS.filter((facet) => facet !== start)];
+  for (const facet of ordered) {
+    const facetValue = await corpus.pickFacetValue(facet, rng());
+    if (facetValue) return { facet, facetValue };
+  }
+  throw new Error('corpus has no facet values');
+}
 
 /**
  * One spin: choose a facet, then walk the weighted hierarchy down to a single
@@ -24,9 +42,10 @@ export async function handleSpin(
   const rng = options.rng ?? Math.random;
   const exclude = options.excludeArtistIds ?? new Set<string>();
 
-  const facet = pickFacet(rng);
-  const facetValue = await corpus.pickFacetValue(facet, rng());
-  if (!facetValue) throw new Error(`no facet values for ${facet}`);
+  // Choose a facet, but skip ones the corpus has no values for (e.g. genres
+  // before the derived dump is loaded), so a partially-populated corpus still
+  // resolves every spin.
+  const { facet, facetValue } = await chooseFacet(corpus, rng);
 
   let artistId: string | null = null;
   for (let attempt = 0; attempt < ANTI_REPEAT_ATTEMPTS; attempt++) {
