@@ -9,3 +9,6 @@ playwright-report
 test-results
 pnpm-lock.yaml
 data
+
+# release-please owns CHANGELOG formatting; keep prettier off it.
+CHANGELOG.md
