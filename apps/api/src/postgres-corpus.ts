@@ -23,8 +23,13 @@ export interface SqlClient {
  * If the facet has no values, `cf` is empty and every downstream CTE resolves
  * to nothing, so the query returns zero rows and the caller tries another facet.
  *
- * $1 facet_type  $2 facet draw  $3 artist draws[]  $4 release-group draw
- * $5 recording draw  $6 exclude artist ids[]
+ * The array parameters ($3, $6) are passed as comma-joined strings and split
+ * with string_to_array, not as bound arrays: postgres.js with fetch_types off
+ * (how the Worker talks to Hyperdrive) serializes a JS array to a bare comma
+ * string, which a `::type[]` cast then rejects as a malformed array literal.
+ *
+ * $1 facet_type  $2 facet draw  $3 artist draws (comma string)
+ * $4 release-group draw  $5 recording draw  $6 exclude artist ids (comma string)
  */
 const SPIN_SQL = `
 WITH
@@ -47,14 +52,15 @@ artist_draws AS (
       AND fa.cum_weight >= d.r * (SELECT m FROM fa_total)
     ORDER BY fa.cum_weight LIMIT 1
   ) AS artist_id
-  FROM unnest($3::double precision[]) WITH ORDINALITY AS d(r, ord)
+  FROM unnest(string_to_array($3, ',')::double precision[]) WITH ORDINALITY AS d(r, ord)
 ),
 ca AS (
   -- Prefer the first draw landing on a non-excluded artist; if every draw is
-  -- excluded, fall back to the first draw so a spin always resolves.
+  -- excluded, fall back to the first draw so a spin always resolves. An empty
+  -- exclude string yields NULL (no exclusions), so ordering falls to ord.
   SELECT artist_id FROM artist_draws
   WHERE artist_id IS NOT NULL
-  ORDER BY (artist_id = ANY($6)), ord
+  ORDER BY (artist_id = ANY(string_to_array(NULLIF($6, ''), ','))), ord
   LIMIT 1
 ),
 rg_total AS (
@@ -108,10 +114,10 @@ export class PostgresCorpusProvider implements CorpusProvider {
     const { rows } = await this.client.query(SPIN_SQL, [
       input.facet,
       input.facetDraw,
-      input.artistDraws,
+      input.artistDraws.join(','),
       input.releaseGroupDraw,
       input.recordingDraw,
-      [...input.exclude],
+      [...input.exclude].join(','),
     ]);
     const row = rows[0];
     if (!row) return null;
