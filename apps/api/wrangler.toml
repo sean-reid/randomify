@@ -9,23 +9,21 @@ routes = [{ pattern = "api.randomify-dev.dwainosaur.com", custom_domain = true }
 
 # The corpus lives in Neon Postgres, reached from the Worker through Hyperdrive.
 # Each environment points at its own Neon branch via its own Hyperdrive config.
-# Until those are provisioned the Worker serves a built-in demo corpus, so every
-# environment is runnable. Uncomment and fill the id once provisioned.
-#
-# [[hyperdrive]]
-# binding = "HYPERDRIVE"
-# id = "<dev-hyperdrive-config-id>"
+# The Worker falls back to the demo corpus when the binding is absent.
+[[hyperdrive]]
+binding = "HYPERDRIVE"
+id = "b3a5910cfb044a3d99060c7784a40baf"
 
 [env.staging]
 name = "randomify-api-staging"
 routes = [{ pattern = "api.randomify-staging.dwainosaur.com", custom_domain = true }]
-# [[env.staging.hyperdrive]]
-# binding = "HYPERDRIVE"
-# id = "<staging-hyperdrive-config-id>"
+[[env.staging.hyperdrive]]
+binding = "HYPERDRIVE"
+id = "75213f4579c34270ac23cee10aed26e2"
 
 [env.production]
 name = "randomify-api-production"
 routes = [{ pattern = "api.randomify.dwainosaur.com", custom_domain = true }]
-# [[env.production.hyperdrive]]
-# binding = "HYPERDRIVE"
-# id = "<production-hyperdrive-config-id>"
+[[env.production.hyperdrive]]
+binding = "HYPERDRIVE"
+id = "09e9b966476548d89c9f977a99aeb7a0"
