@@ -34,6 +34,32 @@ describe('resolvePlatform', () => {
     expect(result).toMatchObject({ kind: 'exact', confidence: 1, strategy: 'isrc' });
   });
 
+  it('rejects a trusted ISRC match that is a completely different song', async () => {
+    // A bad ISRC that resolves to an unrelated track (the Corcovado bug).
+    const r = resolver([
+      strategy('isrc', {
+        url: 'https://open.spotify.com/track/wrong',
+        matched: { artist: 'Nelson Gonçalves', title: 'Meu Nome é Ninguém', durationMs: 190000 },
+        trusted: true,
+      }),
+    ]);
+    const result = await resolvePlatform(r, fingerprint);
+    expect(result.kind).toBe('search_fallback');
+    expect(result.strategy).toBeNull();
+  });
+
+  it('accepts a trusted ISRC match with only cosmetic metadata differences', async () => {
+    const r = resolver([
+      strategy('isrc', {
+        url: 'https://open.spotify.com/track/ok',
+        matched: { artist: 'Radiohead', title: 'Paranoid Android (Remaster)', durationMs: 384000 },
+        trusted: true,
+      }),
+    ]);
+    const result = await resolvePlatform(r, fingerprint);
+    expect(result).toMatchObject({ kind: 'exact', confidence: 1 });
+  });
+
   it('accepts a fuzzy candidate that clears the threshold', async () => {
     const r = resolver([
       strategy('search', {

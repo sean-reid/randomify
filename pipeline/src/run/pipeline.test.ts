@@ -37,14 +37,14 @@ describe('runPipeline', () => {
       cache: new InMemoryResolutionCache(),
     });
 
-    // The fixture has 4 recordings; 3 carry an ISRC, so 3 are streamable.
+    // The fixture has 4 recordings; 2 carry an ISRC, so 2 are streamable.
     expect(summary.ingested).toBe(4);
-    expect(summary.streamable).toBe(3);
+    expect(summary.streamable).toBe(2);
     expect(summary.metrics.deezer!.attempts).toBe(4);
-    expect(summary.metrics.deezer!.exactHits).toBe(3);
+    expect(summary.metrics.deezer!.exactHits).toBe(2);
 
     const recordings = await db.query<{ n: number }>('SELECT count(*)::int AS n FROM recording');
-    expect(recordings.rows[0]!.n).toBe(3);
+    expect(recordings.rows[0]!.n).toBe(2);
     const facets = await db.query<{ n: number }>('SELECT count(*)::int AS n FROM facet_value');
     expect(facets.rows[0]!.n).toBeGreaterThan(0);
   });
