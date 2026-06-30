@@ -1,0 +1,21 @@
+name: Release
+
+# Cuts releases from the production branch: conventional commits drive the
+# version bump, CHANGELOG, tag, and GitHub Release via a release PR.
+on:
+  push:
+    branches: [production]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@v4
+        with:
+          target-branch: production
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json

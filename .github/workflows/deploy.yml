@@ -1,22 +1,47 @@
 name: Deploy
 
+# Branch-per-environment: pushing an environment branch deploys that
+# environment. Promote with fast-forward merges dev -> staging -> production.
 on:
   push:
-    branches: [main]
-  workflow_dispatch:
+    branches: [dev, staging, production]
 
-# Deploys are off until the infra exists. Set the repo variable
-# DEPLOY_ENABLED=true once Cloudflare, the Pages projects, the custom domains,
-# and the CLOUDFLARE_* secrets are in place. Until then these jobs skip cleanly
-# rather than failing.
 concurrency:
   group: deploy-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
+  dev:
+    name: Deploy dev
+    if: github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-latest
+    environment: dev
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @randomify/shared build
+      - name: Deploy API Worker (dev)
+        run: pnpm --filter @randomify/api exec wrangler deploy
+      - name: Build web (dev)
+        run: pnpm --filter @randomify/web build
+        env:
+          PUBLIC_RANDOMIFY_API: https://api.randomify-dev.dwainosaur.com
+      - name: Deploy web to Pages (dev)
+        run: >-
+          pnpm --filter @randomify/web exec wrangler pages deploy
+          --project-name=randomify-web-dev --branch=production --commit-dirty=true
+
   staging:
-    name: Deploy to staging
-    if: ${{ vars.DEPLOY_ENABLED == 'true' }}
+    name: Deploy staging
+    if: github.ref == 'refs/heads/staging'
     runs-on: ubuntu-latest
     environment: staging
     env:
@@ -31,24 +56,23 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @randomify/shared build
-
       - name: Deploy API Worker (staging)
         run: pnpm --filter @randomify/api exec wrangler deploy --env staging
-
-      - name: Build web
+      - name: Build web (staging)
         run: pnpm --filter @randomify/web build
+        env:
+          PUBLIC_RANDOMIFY_API: https://api.randomify-staging.dwainosaur.com
       - name: Deploy web to Pages (staging)
         run: >-
           pnpm --filter @randomify/web exec wrangler pages deploy
           --project-name=randomify-web-staging --branch=production --commit-dirty=true
 
   production:
-    name: Deploy to production
-    if: ${{ vars.DEPLOY_ENABLED == 'true' }}
-    needs: staging
+    name: Deploy production
+    if: github.ref == 'refs/heads/production'
     runs-on: ubuntu-latest
-    # The production GitHub Environment carries the required-reviewer gate, so
-    # this job pauses for manual approval before it runs.
+    # The production environment carries the required-reviewer gate, so this
+    # waits for manual approval before deploying.
     environment: production
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -62,12 +86,12 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @randomify/shared build
-
       - name: Deploy API Worker (production)
         run: pnpm --filter @randomify/api exec wrangler deploy --env production
-
-      - name: Build web
+      - name: Build web (production)
         run: pnpm --filter @randomify/web build
+        env:
+          PUBLIC_RANDOMIFY_API: https://api.randomify.dwainosaur.com
       - name: Deploy web to Pages (production)
         run: >-
           pnpm --filter @randomify/web exec wrangler pages deploy
