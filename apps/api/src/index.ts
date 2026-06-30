@@ -71,7 +71,17 @@ export default {
     const url = new URL(request.url);
 
     if (url.pathname === '/health') {
-      return json({ status: 'ok' });
+      // Deep check: confirm the corpus is actually reachable, so an external
+      // uptime monitor detects a DB/Hyperdrive outage, not just a live Worker.
+      const corpus = getCorpus(env);
+      try {
+        await corpus.provider.ping();
+        return json({ status: 'ok', corpus: corpus.kind });
+      } catch {
+        return json({ status: 'degraded', corpus: corpus.kind }, 503);
+      } finally {
+        ctx.waitUntil(corpus.close().catch(() => {}));
+      }
     }
 
     if (url.pathname === '/spin') {

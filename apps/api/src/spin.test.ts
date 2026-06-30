@@ -65,6 +65,7 @@ describe('handleSpin', () => {
   it('falls back to a populated facet when others are empty', async () => {
     // A corpus that only knows decades (e.g. before the genre dump is loaded).
     const decadeOnly: CorpusProvider = {
+      ping: () => Promise.resolve(),
       pickFacetValue: (facet, _r) => Promise.resolve(facet === 'decade' ? '1990s' : null),
       pickArtist: () => Promise.resolve('a1'),
       pickReleaseGroup: () => Promise.resolve('rg1'),

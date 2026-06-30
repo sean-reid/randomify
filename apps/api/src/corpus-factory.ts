@@ -7,6 +7,8 @@ import type { Env } from './env.js';
 /** A corpus provider plus a cleanup handle for any connection it opened. */
 export interface CorpusHandle {
   provider: CorpusProvider;
+  /** Which backend is serving: the real Postgres corpus or the demo fallback. */
+  kind: 'postgres' | 'demo';
   close(): Promise<void>;
 }
 
@@ -17,7 +19,7 @@ export interface CorpusHandle {
  */
 export function getCorpus(env: Env): CorpusHandle {
   if (!env.HYPERDRIVE) {
-    return { provider: new DemoCorpusProvider(), close: () => Promise.resolve() };
+    return { provider: new DemoCorpusProvider(), kind: 'demo', close: () => Promise.resolve() };
   }
 
   // fetch_types: false avoids extra round-trips that do not work well through
@@ -31,5 +33,5 @@ export function getCorpus(env: Env): CorpusHandle {
       >[],
     }),
   };
-  return { provider: new PostgresCorpusProvider(client), close: () => sql.end() };
+  return { provider: new PostgresCorpusProvider(client), kind: 'postgres', close: () => sql.end() };
 }

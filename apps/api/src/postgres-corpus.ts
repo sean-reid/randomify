@@ -21,6 +21,13 @@ export interface SqlClient {
 export class PostgresCorpusProvider implements CorpusProvider {
   constructor(private readonly client: SqlClient) {}
 
+  /** Confirm the database answers and the corpus has recordings to serve.
+   * EXISTS short-circuits at the first row, so it stays cheap on a large table. */
+  async ping(): Promise<void> {
+    const { rows } = await this.client.query('SELECT EXISTS (SELECT 1 FROM recording) AS has');
+    if (!rows[0] || rows[0].has !== true) throw new Error('corpus is empty');
+  }
+
   private async one<T>(sql: string, params: unknown[], column: string): Promise<T | null> {
     const { rows } = await this.client.query(sql, params);
     const row = rows[0];
