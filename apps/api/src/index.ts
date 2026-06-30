@@ -77,7 +77,8 @@ export default {
       try {
         await corpus.provider.ping();
         return json({ status: 'ok', corpus: corpus.kind });
-      } catch {
+      } catch (err) {
+        console.error('health check failed', err);
         return json({ status: 'degraded', corpus: corpus.kind }, 503);
       } finally {
         ctx.waitUntil(corpus.close().catch(() => {}));
@@ -95,7 +96,8 @@ export default {
         const preview = result.song.previewUrl;
         result.song.previewUrl = preview?.startsWith('/') ? `${url.origin}${preview}` : null;
         return json(result);
-      } catch {
+      } catch (err) {
+        console.error('spin failed', err);
         return json({ error: 'corpus unavailable' }, 503);
       } finally {
         ctx.waitUntil(corpus.close().catch(() => {}));

@@ -157,6 +157,13 @@ describe('PostgresCorpusProvider', () => {
     await expect(emptyProvider.ping()).rejects.toThrow();
   });
 
+  it('pickRecording handles the r->1.0 boundary (clamped to the last recording)', async () => {
+    // Without the LEAST clamp, floor(1*m)+1 = m+1 misses every row and returns null.
+    const id = await provider.pickRecording('rg1', 1);
+    expect(id).not.toBeNull();
+    expect(SEEDS.map((s) => s.id)).toContain(id);
+  });
+
   it('walks to valid songs from the seeded corpus', async () => {
     const rng = mulberry32(1);
     const ids = new Set<string>();

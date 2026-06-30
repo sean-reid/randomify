@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolvePreview, type PreviewFetch } from './preview.js';
+import { resolvePreview, isDeezerPreviewUrl, type PreviewFetch } from './preview.js';
 
 const ok = (body: unknown): PreviewFetch => {
   const fn = ((url: string) => {
@@ -33,5 +33,19 @@ describe('resolvePreview', () => {
   it('returns null on a non-ok response', async () => {
     const fn: PreviewFetch = () => Promise.resolve({ ok: false, json: () => Promise.resolve({}) });
     expect(await resolvePreview('1', fn)).toBeNull();
+  });
+
+  it('rejects a preview URL that is not on a Deezer CDN host', async () => {
+    expect(await resolvePreview('1', ok({ preview: 'https://evil.example/x.mp3' }))).toBeNull();
+  });
+});
+
+describe('isDeezerPreviewUrl', () => {
+  it('accepts https Deezer CDN hosts and rejects everything else', () => {
+    expect(isDeezerPreviewUrl('https://cdnt-preview.dzcdn.net/a.mp3?hdnea=x')).toBe(true);
+    expect(isDeezerPreviewUrl('https://cdns-preview-9.dzcdn.net/stream/b.mp3')).toBe(true);
+    expect(isDeezerPreviewUrl('http://cdnt-preview.dzcdn.net/a.mp3')).toBe(false); // not https
+    expect(isDeezerPreviewUrl('https://evil.example/dzcdn.net.mp3')).toBe(false); // host mismatch
+    expect(isDeezerPreviewUrl('not a url')).toBe(false);
   });
 });
