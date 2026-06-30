@@ -17,9 +17,6 @@
   // Safari blocks a play() that is not inside a user gesture, so the first
   // gesture primes the element (a muted play/pause) to bless later autoplay.
   let primed = false;
-  // Bounds auto-skipping when previews fail to load, so a run of dead previews
-  // (or being offline) can't loop forever.
-  let autoFails = 0;
 
   const recent = new RecentArtists();
   let prefetched: Promise<SpinResponse> | null = null;
@@ -90,17 +87,26 @@
     action();
   }
 
-  /** A preview failed to load (404/region/offline). Skip a few dead ones for
-   * continuous play, then stop and show the song without a player. */
+  /**
+   * Preflight a preview without the browser logging a failed request: a manual
+   * redirect means a live preview resolves to an opaque redirect (302 to
+   * Deezer) and a dead one to our Worker's 404 - both clean fetch outcomes, no
+   * console error. Only validated previews are ever given to an <audio>.
+   */
+  async function isPreviewLive(proxyUrl: string): Promise<boolean> {
+    try {
+      const res = await fetch(proxyUrl, { redirect: 'manual' });
+      return res.type === 'opaqueredirect' || res.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  /** A committed (preflighted) preview failed at play time - rare, e.g. it went
+   * unavailable since. Hide the player; never flash/skip. */
   function onPreviewError(): void {
     playing = false;
-    if (!song?.previewUrl) return;
-    if (autoFails < 4) {
-      autoFails += 1;
-      next();
-    } else {
-      playerError = true;
-    }
+    if (song?.previewUrl) playerError = true;
   }
 
   /** Preload and decode a cover so it appears in sync with the title. */
@@ -115,17 +121,38 @@
     }
   }
 
-  /** Discover a fresh song: drop any forward history, append, move to it. */
+  /**
+   * Discover a fresh song: drop any forward history, append, move to it. A
+   * candidate whose preview won't play is skipped before it is ever shown (no
+   * flash, no entry in history), trying a few more before giving up.
+   */
   async function discover(): Promise<void> {
     if (loading) return;
     loading = true;
     error = null;
     try {
-      const next = prefetched ?? spin(recent);
-      prefetched = null;
-      const result = await next;
-      // Wait for the cover so art and title appear together, not staggered.
-      await loadCover(result.song.coverArtUrl);
+      let result: SpinResponse | null = null;
+      for (let attempt = 0; attempt < 6 && !result; attempt += 1) {
+        const candidate = await (prefetched ?? spin(recent));
+        prefetched = null;
+        const url = candidate.song.previewUrl;
+        // Validate the preview and warm the cover together, so a committed song
+        // shows art and title in sync.
+        const [playable] = await Promise.all([
+          url ? isPreviewLive(url) : Promise.resolve(true),
+          loadCover(candidate.song.coverArtUrl),
+        ]);
+        if (playable) {
+          result = candidate;
+        } else {
+          recent.add(candidate.song.artistId);
+          prefetched = spin(recent);
+        }
+      }
+      if (!result) {
+        error = 'Could not find a playable song. Try shuffling again.';
+        return;
+      }
       history = [...history.slice(0, index + 1), result];
       index = history.length - 1;
       recent.add(result.song.artistId);
@@ -333,7 +360,6 @@
     onplay={() => {
       playing = true;
       primed = true;
-      autoFails = 0;
     }}
     onpause={() => (playing = false)}
     onended={() => {

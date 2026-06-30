@@ -104,6 +104,37 @@ test('a song without a preview shows no play affordance, links still work', asyn
   await expect(page.getByTestId('links').getByRole('link')).toHaveCount(SAMPLE_SPIN.links.length);
 });
 
+test('skips a song whose preview is dead and shows the next playable one', async ({ page }) => {
+  // The dead preview's proxy URL 404s; the manual-redirect preflight sees that
+  // and the song is never committed to the deck.
+  await page.route('**/dead-preview*', (route) =>
+    route.fulfill({ status: 404, headers: { 'access-control-allow-origin': '*' }, body: '' }),
+  );
+
+  let n = 0;
+  await page.route('**/spin*', async (route) => {
+    n += 1;
+    const dead = n === 1;
+    const body = {
+      ...SAMPLE_SPIN,
+      song: {
+        ...SAMPLE_SPIN.song,
+        recordingId: dead ? 'dead-1' : 'good-1',
+        title: dead ? 'Dead Song' : 'Good Song',
+        previewUrl: dead ? 'https://example.test/dead-preview.mp3' : SAMPLE_SPIN.song.previewUrl,
+      },
+    };
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(body),
+    });
+  });
+
+  await page.goto('/');
+  await expect(page.getByTestId('title')).toHaveText('Good Song');
+});
+
 test('browse backward and forward through the deck', async ({ page }) => {
   // Distinct songs per spin so navigation is observable.
   let n = 0;
