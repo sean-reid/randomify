@@ -1,0 +1,5 @@
+name = "randomify-web"
+pages_build_output_dir = ".svelte-kit/cloudflare"
+compatibility_date = "2025-06-01"
+# SvelteKit's Cloudflare adapter pulls in node:async_hooks.
+compatibility_flags = ["nodejs_compat"]

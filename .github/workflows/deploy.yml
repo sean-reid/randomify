@@ -40,7 +40,7 @@ jobs:
       - name: Deploy web to Pages (staging)
         run: >-
           pnpm --filter @randomify/web exec wrangler pages deploy
-          .svelte-kit/cloudflare --project-name=randomify-web-staging --branch=production
+          --project-name=randomify-web-staging --branch=production --commit-dirty=true
 
   production:
     name: Deploy to production
@@ -71,4 +71,4 @@ jobs:
       - name: Deploy web to Pages (production)
         run: >-
           pnpm --filter @randomify/web exec wrangler pages deploy
-          .svelte-kit/cloudflare --project-name=randomify-web --branch=production
+          --project-name=randomify-web --branch=production --commit-dirty=true
