@@ -98,7 +98,13 @@ run_job() {
   local jobvar="HEALTHCHECK_URL_$(echo "$name" | tr '[:lower:]' '[:upper:]')"
   HEALTHCHECK_URL="${!jobvar:-${HEALTHCHECK_URL:-}}"
   hc /start
-  if "$fn"; then
+  # Run the job body in a subshell with its own `set -e` so an intermediate
+  # failure (download, build, extract) aborts the job. Calling "$fn" directly as
+  # an `if` condition would suppress `set -e` for the whole body.
+  if (
+    set -e
+    "$fn"
+  ); then
     hc
   else
     local code=$?

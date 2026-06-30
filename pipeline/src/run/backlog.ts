@@ -124,8 +124,20 @@ export async function selectUnresolved(
     country: row.country == null ? null : String(row.country),
     language: row.language == null ? null : String(row.language),
     genres: Array.isArray(row.genres) ? row.genres.map(String) : [],
-    streamingLinks: row.streaming_links ? JSON.parse(String(row.streaming_links)) : {},
+    streamingLinks: parseStreamingLinks(row.streaming_links, String(row.recording_id)),
   }));
+}
+
+/** Parse the stored streaming-links JSON, tolerating a corrupt value. */
+function parseStreamingLinks(value: unknown, recordingId: string): Record<string, string> {
+  if (!value) return {};
+  try {
+    const parsed = JSON.parse(String(value));
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, string>) : {};
+  } catch {
+    console.error(`backlog: bad streaming_links JSON for ${recordingId}`);
+    return {};
+  }
 }
 
 /** Mark recordings resolved so they are not pulled again. */

@@ -80,16 +80,18 @@ primary_artist AS (
 ),
 rec_rg AS (
   SELECT t.recording AS recording, r.id AS release, r.release_group AS rg, r.language AS lang,
-         COALESCE(rgm.first_year, 99999) AS yr
+         rgm.first_year AS yr
   FROM track t
   JOIN medium m ON m.id = t.medium
   JOIN release r ON r.id = m.release
   LEFT JOIN release_group_meta rgm ON rgm.id = r.release_group
 ),
 chosen AS (
-  SELECT recording, release, rg, lang, NULLIF(yr, 99999) AS yr FROM (
+  -- Earliest dated release per recording (a known year beats an unknown one),
+  -- via NULLS LAST instead of a 99999 sentinel that could null a real year.
+  SELECT recording, release, rg, lang, yr FROM (
     SELECT recording, release, rg, lang, yr,
-           row_number() OVER (PARTITION BY recording ORDER BY yr, rg) AS rn
+           row_number() OVER (PARTITION BY recording ORDER BY yr ASC NULLS LAST, rg) AS rn
     FROM rec_rg
   ) WHERE rn = 1
 ),
@@ -235,7 +237,7 @@ export async function extractMusicBrainz(
     artistId: String(row.artistId),
     artist: String(row.artist),
     releaseGroupId: String(row.releaseGroupId),
-    releaseTitle: String(row.releaseTitle),
+    releaseTitle: str(row.releaseTitle) ?? '',
     year: num(row.year),
     durationMs: num(row.durationMs),
     isrc: str(row.isrc),

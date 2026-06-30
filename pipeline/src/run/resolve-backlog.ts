@@ -29,7 +29,7 @@ function fromMap<V>(map: ReadonlyMap<PlatformId, V>): Record<string, V> {
  * One incremental resolve pass: pull a chunk of unresolved recordings from the
  * backlog, resolve their links (throttled + cached), upsert the streamable ones
  * into the serving corpus, and mark the chunk resolved. Idempotent and
- * resumable — a crash just leaves the chunk unmarked for the next run. Weights
+ * resumable - a crash just leaves the chunk unmarked for the next run. Weights
  * are recomputed separately by the weight-rebuild job.
  */
 export async function resolveBacklog(
