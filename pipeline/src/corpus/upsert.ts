@@ -1,3 +1,4 @@
+import { bulkUpsert, toPgArray } from './bulk.js';
 import { applySchema, type CorpusData, type SqlClient } from './export.js';
 
 /**
@@ -6,78 +7,51 @@ import { applySchema, type CorpusData, type SqlClient } from './export.js';
  * (unlike exportCorpus, which truncate-reloads the whole corpus). Weights are
  * not touched here; they are recomputed by the separate weight-rebuild job.
  */
-const CHUNK = 1000;
-
-function toPgArray(items: string[]): string {
-  return `{${items.map((s) => `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`).join(',')}}`;
-}
-
-async function upsert(
-  client: SqlClient,
-  table: string,
-  columns: string[],
-  conflict: string,
-  rows: readonly unknown[][],
-): Promise<void> {
-  const updates = columns
-    .filter((c) => !conflict.includes(c))
-    .map((c) => `${c} = EXCLUDED.${c}`)
-    .join(', ');
-  for (let start = 0; start < rows.length; start += CHUNK) {
-    const chunk = rows.slice(start, start + CHUNK);
-    const params: unknown[] = [];
-    const tuples = chunk.map((values) => {
-      const ph = values.map((v) => {
-        params.push(v);
-        return `$${params.length}`;
-      });
-      return `(${ph.join(', ')})`;
-    });
-    await client.query(
-      `INSERT INTO ${table} (${columns.join(', ')}) VALUES ${tuples.join(', ')}
-       ON CONFLICT (${conflict}) DO UPDATE SET ${updates}`,
-      params,
-    );
-  }
-}
-
 export async function upsertCorpus(
   client: SqlClient,
   data: Pick<CorpusData, 'artists' | 'releaseGroups' | 'recordings' | 'links'>,
 ): Promise<void> {
   await applySchema(client);
 
-  await upsert(
+  await bulkUpsert(
     client,
     'artist',
-    ['id', 'name', 'country'],
-    'id',
+    [
+      { name: 'id', type: 'text' },
+      { name: 'name', type: 'text' },
+      { name: 'country', type: 'text' },
+    ],
     data.artists.map((a) => [a.id, a.name, a.country]),
+    'id',
   );
-  await upsert(
+  await bulkUpsert(
     client,
     'release_group',
-    ['id', 'artist_id', 'title', 'year'],
-    'id',
+    [
+      { name: 'id', type: 'text' },
+      { name: 'artist_id', type: 'text' },
+      { name: 'title', type: 'text' },
+      { name: 'year', type: 'int' },
+    ],
     data.releaseGroups.map((rg) => [rg.id, rg.artistId, rg.title, rg.year]),
+    'id',
   );
-  await upsert(
+  await bulkUpsert(
     client,
     'recording',
     [
-      'id',
-      'artist_id',
-      'release_group_id',
-      'title',
-      'isrc',
-      'duration_ms',
-      'year',
-      'language',
-      'cover_art_url',
-      'preview_url',
-      'genres',
+      { name: 'id', type: 'text' },
+      { name: 'artist_id', type: 'text' },
+      { name: 'release_group_id', type: 'text' },
+      { name: 'title', type: 'text' },
+      { name: 'isrc', type: 'text' },
+      { name: 'duration_ms', type: 'int' },
+      { name: 'year', type: 'int' },
+      { name: 'language', type: 'text' },
+      { name: 'cover_art_url', type: 'text' },
+      { name: 'preview_url', type: 'text' },
+      { name: 'genres', type: 'text', cast: 'text[]' },
     ],
-    'id',
     data.recordings.map((r) => [
       r.id,
       r.artistId,
@@ -91,12 +65,19 @@ export async function upsertCorpus(
       r.previewUrl,
       toPgArray(r.genres),
     ]),
+    'id',
   );
-  await upsert(
+  await bulkUpsert(
     client,
     'platform_link',
-    ['recording_id', 'platform', 'url', 'kind', 'confidence'],
-    'recording_id, platform',
+    [
+      { name: 'recording_id', type: 'text' },
+      { name: 'platform', type: 'text' },
+      { name: 'url', type: 'text' },
+      { name: 'kind', type: 'text' },
+      { name: 'confidence', type: 'double precision' },
+    ],
     data.links.map((l) => [l.recordingId, l.platform, l.url, l.kind, l.confidence]),
+    'recording_id, platform',
   );
 }

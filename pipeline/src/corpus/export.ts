@@ -1,4 +1,5 @@
 import type { LinkKind, PlatformId } from '@randomify/shared';
+import { bulkUpsert, toPgArray, type BulkColumn } from './bulk.js';
 import { CORPUS_TABLES, SCHEMA_SQL } from './schema.js';
 import type { CorpusWeights } from './weights.js';
 
@@ -47,11 +48,6 @@ export interface CorpusData {
   weights: CorpusWeights;
 }
 
-/** Format a string list as a Postgres array literal, e.g. {"bossa nova","jazz"}. */
-function toPgArray(items: string[]): string {
-  return `{${items.map((s) => `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`).join(',')}}`;
-}
-
 /**
  * Add columns introduced after a table's first creation, so an existing
  * database is brought up to date in place (CREATE TABLE IF NOT EXISTS never
@@ -73,30 +69,14 @@ export async function applySchema(client: SqlClient): Promise<void> {
   for (const migration of SCHEMA_MIGRATIONS) await client.query(migration);
 }
 
-const CHUNK = 500;
-
-/** Batched multi-row INSERT. */
-async function insertRows(
+/** Bulk INSERT into a freshly-truncated table via array-bound `unnest`. */
+function insertRows(
   client: SqlClient,
   table: string,
-  columns: string[],
+  columns: BulkColumn[],
   rows: readonly unknown[][],
 ): Promise<void> {
-  for (let start = 0; start < rows.length; start += CHUNK) {
-    const chunk = rows.slice(start, start + CHUNK);
-    const params: unknown[] = [];
-    const tuples = chunk.map((values) => {
-      const placeholders = values.map((value) => {
-        params.push(value);
-        return `$${params.length}`;
-      });
-      return `(${placeholders.join(', ')})`;
-    });
-    await client.query(
-      `INSERT INTO ${table} (${columns.join(', ')}) VALUES ${tuples.join(', ')}`,
-      params,
-    );
-  }
+  return bulkUpsert(client, table, columns, rows);
 }
 
 /**
@@ -113,30 +93,39 @@ export async function exportCorpus(client: SqlClient, data: CorpusData): Promise
     await insertRows(
       client,
       'artist',
-      ['id', 'name', 'country'],
+      [
+        { name: 'id', type: 'text' },
+        { name: 'name', type: 'text' },
+        { name: 'country', type: 'text' },
+      ],
       data.artists.map((a) => [a.id, a.name, a.country]),
     );
     await insertRows(
       client,
       'release_group',
-      ['id', 'artist_id', 'title', 'year'],
+      [
+        { name: 'id', type: 'text' },
+        { name: 'artist_id', type: 'text' },
+        { name: 'title', type: 'text' },
+        { name: 'year', type: 'int' },
+      ],
       data.releaseGroups.map((rg) => [rg.id, rg.artistId, rg.title, rg.year]),
     );
     await insertRows(
       client,
       'recording',
       [
-        'id',
-        'artist_id',
-        'release_group_id',
-        'title',
-        'isrc',
-        'duration_ms',
-        'year',
-        'language',
-        'cover_art_url',
-        'preview_url',
-        'genres',
+        { name: 'id', type: 'text' },
+        { name: 'artist_id', type: 'text' },
+        { name: 'release_group_id', type: 'text' },
+        { name: 'title', type: 'text' },
+        { name: 'isrc', type: 'text' },
+        { name: 'duration_ms', type: 'int' },
+        { name: 'year', type: 'int' },
+        { name: 'language', type: 'text' },
+        { name: 'cover_art_url', type: 'text' },
+        { name: 'preview_url', type: 'text' },
+        { name: 'genres', type: 'text', cast: 'text[]' },
       ],
       data.recordings.map((r) => [
         r.id,
@@ -155,7 +144,13 @@ export async function exportCorpus(client: SqlClient, data: CorpusData): Promise
     await insertRows(
       client,
       'platform_link',
-      ['recording_id', 'platform', 'url', 'kind', 'confidence'],
+      [
+        { name: 'recording_id', type: 'text' },
+        { name: 'platform', type: 'text' },
+        { name: 'url', type: 'text' },
+        { name: 'kind', type: 'text' },
+        { name: 'confidence', type: 'double precision' },
+      ],
       data.links.map((l) => [l.recordingId, l.platform, l.url, l.kind, l.confidence]),
     );
     await insertWeights(client, data.weights);
@@ -172,25 +167,45 @@ export async function insertWeights(client: SqlClient, weights: CorpusWeights): 
   await insertRows(
     client,
     'facet_value',
-    ['facet_type', 'facet_id', 'weight', 'cum_weight'],
+    [
+      { name: 'facet_type', type: 'text' },
+      { name: 'facet_id', type: 'text' },
+      { name: 'weight', type: 'double precision' },
+      { name: 'cum_weight', type: 'double precision' },
+    ],
     weights.facetValues.map((f) => [f.facetType, f.facetId, f.weight, f.cumWeight]),
   );
   await insertRows(
     client,
     'facet_artist',
-    ['facet_type', 'facet_id', 'artist_id', 'weight', 'cum_weight'],
+    [
+      { name: 'facet_type', type: 'text' },
+      { name: 'facet_id', type: 'text' },
+      { name: 'artist_id', type: 'text' },
+      { name: 'weight', type: 'double precision' },
+      { name: 'cum_weight', type: 'double precision' },
+    ],
     weights.facetArtists.map((f) => [f.facetType, f.facetId, f.artistId, f.weight, f.cumWeight]),
   );
   await insertRows(
     client,
     'artist_release_group',
-    ['artist_id', 'release_group_id', 'weight', 'cum_weight'],
+    [
+      { name: 'artist_id', type: 'text' },
+      { name: 'release_group_id', type: 'text' },
+      { name: 'weight', type: 'double precision' },
+      { name: 'cum_weight', type: 'double precision' },
+    ],
     weights.artistReleaseGroups.map((a) => [a.artistId, a.releaseGroupId, a.weight, a.cumWeight]),
   );
   await insertRows(
     client,
     'release_group_recording',
-    ['release_group_id', 'recording_id', 'cum_index'],
+    [
+      { name: 'release_group_id', type: 'text' },
+      { name: 'recording_id', type: 'text' },
+      { name: 'cum_index', type: 'int' },
+    ],
     weights.releaseGroupRecordings.map((r) => [r.releaseGroupId, r.recordingId, r.cumIndex]),
   );
 }
