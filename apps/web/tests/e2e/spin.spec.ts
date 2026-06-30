@@ -87,6 +87,23 @@ test('space toggles play/pause without shuffling', async ({ page }) => {
   expect(spins).toBe(0);
 });
 
+test('a song without a preview shows no play affordance, links still work', async ({ page }) => {
+  await page.route('**/spin*', async (route) => {
+    const body = { ...SAMPLE_SPIN, song: { ...SAMPLE_SPIN.song, previewUrl: null } };
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(body),
+    });
+  });
+
+  await page.goto('/');
+  await expect(page.getByTestId('title')).toBeVisible();
+  await expect(page.getByTestId('playpause')).toBeDisabled();
+  await expect(page.getByTestId('cover-toggle')).toHaveCount(0);
+  await expect(page.getByTestId('links').getByRole('link')).toHaveCount(SAMPLE_SPIN.links.length);
+});
+
 test('browse backward and forward through the deck', async ({ page }) => {
   // Distinct songs per spin so navigation is observable.
   let n = 0;

@@ -11,7 +11,15 @@
   let loading = $state(false);
   let error = $state<string | null>(null);
   let playing = $state(false);
+  let playerError = $state(false);
   let audioEl = $state<HTMLAudioElement>();
+
+  // Safari blocks a play() that is not inside a user gesture, so the first
+  // gesture primes the element (a muted play/pause) to bless later autoplay.
+  let primed = false;
+  // Bounds auto-skipping when previews fail to load, so a run of dead previews
+  // (or being offline) can't loop forever.
+  let autoFails = 0;
 
   const recent = new RecentArtists();
   let prefetched: Promise<SpinResponse> | null = null;
@@ -52,6 +60,47 @@
         playing = false;
       },
     );
+  }
+
+  /**
+   * Prime the audio element inside a user gesture (a silent play/pause) so that
+   * later script-initiated autoplay is permitted, notably on Safari. No-op once
+   * primed or once any real playback has started.
+   */
+  function unlockAudio(): void {
+    const el = audioEl;
+    if (primed || !el) return;
+    primed = true;
+    const wasMuted = el.muted;
+    el.muted = true;
+    Promise.resolve(el.play())
+      .then(() => {
+        el.pause();
+        el.muted = wasMuted;
+      })
+      .catch(() => {
+        el.muted = wasMuted;
+        primed = false;
+      });
+  }
+
+  /** Run a navigation action from a user gesture, priming audio first. */
+  function go(action: () => void): void {
+    unlockAudio();
+    action();
+  }
+
+  /** A preview failed to load (404/region/offline). Skip a few dead ones for
+   * continuous play, then stop and show the song without a player. */
+  function onPreviewError(): void {
+    playing = false;
+    if (!song?.previewUrl) return;
+    if (autoFails < 4) {
+      autoFails += 1;
+      next();
+    } else {
+      playerError = true;
+    }
   }
 
   /** Preload and decode a cover so it appears in sync with the title. */
@@ -114,6 +163,7 @@
     const url = song?.previewUrl ?? null;
     song?.recordingId;
     if (!audioEl) return;
+    playerError = false;
     if (url) playFadeIn();
     else audioEl.pause();
   });
@@ -130,6 +180,7 @@
     const dx = t.clientX - touchX;
     const dy = t.clientY - touchY;
     if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) {
+      unlockAudio();
       if (dx < 0) next();
       else prev();
     }
@@ -140,13 +191,14 @@
     if (target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA') return;
     if (event.code === 'Space') {
       event.preventDefault();
+      unlockAudio();
       togglePlay();
     } else if (event.code === 'ArrowRight') {
       event.preventDefault();
-      next();
+      go(next);
     } else if (event.code === 'ArrowLeft') {
       event.preventDefault();
-      prev();
+      go(prev);
     }
   }
 
@@ -192,7 +244,7 @@
         ontouchstart={onTouchStart}
         ontouchend={onTouchEnd}
       >
-        {#if song.previewUrl}
+        {#if song.previewUrl && !playerError}
           <button
             class="cover cover-btn"
             onclick={togglePlay}
@@ -228,7 +280,7 @@
         <div class="controls" data-testid="controls">
           <button
             class="ctrl"
-            onclick={prev}
+            onclick={() => go(prev)}
             disabled={!canPrev}
             aria-label="Previous song"
             data-testid="prev">‹</button
@@ -236,13 +288,15 @@
           <button
             class="ctrl play"
             onclick={togglePlay}
-            disabled={!song.previewUrl}
+            disabled={!song.previewUrl || playerError}
             aria-label={playing ? 'Pause' : 'Play'}
             data-testid="playpause"
           >
             {@render (playing ? pauseIcon : playIcon)()}
           </button>
-          <button class="ctrl" onclick={next} aria-label="Next song" data-testid="next">›</button>
+          <button class="ctrl" onclick={() => go(next)} aria-label="Next song" data-testid="next"
+            >›</button
+          >
         </div>
 
         <ul class="links" data-testid="links">
@@ -276,16 +330,26 @@
   <audio
     bind:this={audioEl}
     src={song?.previewUrl ?? ''}
-    onplay={() => (playing = true)}
+    onplay={() => {
+      playing = true;
+      primed = true;
+      autoFails = 0;
+    }}
     onpause={() => (playing = false)}
-    onended={() => (playing = false)}
+    onended={() => {
+      playing = false;
+      // Real Deezer previews are ~30s; advance only on a real-length clip so a
+      // degenerate or empty source can't drive a runaway skip loop.
+      if (audioEl && audioEl.duration >= 5) next();
+    }}
+    onerror={onPreviewError}
     preload="metadata"
     data-testid="player-audio"
   ></audio>
 
   <button
     class="shuffle"
-    onclick={discover}
+    onclick={() => go(discover)}
     disabled={loading}
     data-testid="shuffle"
     aria-label="Shuffle to a new song"
