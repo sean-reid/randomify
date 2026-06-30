@@ -1,11 +1,4 @@
-import {
-  DEFAULT_ALPHA,
-  excludeRecent,
-  pickFacet,
-  weightedPick,
-  type Rng,
-  type SpinResponse,
-} from '@randomify/shared';
+import { pickFacet, type Rng, type SpinResponse } from '@randomify/shared';
 import type { CorpusProvider } from './corpus.js';
 
 export interface SpinOptions {
@@ -15,10 +8,14 @@ export interface SpinOptions {
   rng?: Rng;
 }
 
+/** How many times to redraw an artist before accepting a recently seen one. */
+const ANTI_REPEAT_ATTEMPTS = 8;
+
 /**
  * One spin: choose a facet, then walk the weighted hierarchy down to a single
- * recording and return it with its links. Every level uses the same tempered
- * weighting so prolific artists and crowded genres do not dominate.
+ * recording and return it with its links. Anti-repeat is best effort: an
+ * artist seen recently is redrawn a few times, then accepted if the facet value
+ * offers no alternative, so a spin always resolves.
  */
 export async function handleSpin(
   corpus: CorpusProvider,
@@ -28,21 +25,23 @@ export async function handleSpin(
   const exclude = options.excludeArtistIds ?? new Set<string>();
 
   const facet = pickFacet(rng);
-  const facetValues = await corpus.facetValues(facet);
-  const facetValue = weightedPick(facetValues, DEFAULT_ALPHA, rng);
+  const facetValue = await corpus.pickFacetValue(facet, rng());
+  if (!facetValue) throw new Error(`no facet values for ${facet}`);
 
-  const artists = excludeRecent(
-    await corpus.artistsInFacet(facet, facetValue, exclude),
-    (id) => id,
-    exclude,
-  );
-  const artistId = weightedPick(artists, DEFAULT_ALPHA, rng);
+  let artistId: string | null = null;
+  for (let attempt = 0; attempt < ANTI_REPEAT_ATTEMPTS; attempt++) {
+    const candidate = await corpus.pickArtist(facet, facetValue, rng());
+    if (!candidate) break;
+    artistId = candidate;
+    if (!exclude.has(candidate)) break;
+  }
+  if (!artistId) throw new Error(`no artists for ${facet}:${facetValue}`);
 
-  const releaseGroups = await corpus.releaseGroups(artistId);
-  const releaseGroupId = weightedPick(releaseGroups, DEFAULT_ALPHA, rng);
+  const releaseGroupId = await corpus.pickReleaseGroup(artistId, rng());
+  if (!releaseGroupId) throw new Error(`no release groups for artist ${artistId}`);
 
-  const recordings = await corpus.recordings(releaseGroupId);
-  const recordingId = weightedPick(recordings, DEFAULT_ALPHA, rng);
+  const recordingId = await corpus.pickRecording(releaseGroupId, rng());
+  if (!recordingId) throw new Error(`no recordings for release group ${releaseGroupId}`);
 
   const [song, links] = await Promise.all([
     corpus.loadSong(recordingId),

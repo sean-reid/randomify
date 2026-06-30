@@ -1,6 +1,5 @@
 import type { CorpusProvider } from './corpus.js';
 import { DemoCorpusProvider } from './demo-corpus.js';
-import { PostgresCorpusProvider } from './postgres-corpus.js';
 import { handleSpin } from './spin.js';
 import type { Env } from './env.js';
 
@@ -28,8 +27,11 @@ function parseExclude(raw: string | null): Set<string> {
   );
 }
 
-function getCorpus(env: Env): CorpusProvider {
-  return env.HYPERDRIVE ? new PostgresCorpusProvider(env.HYPERDRIVE) : new DemoCorpusProvider();
+function getCorpus(_env: Env): CorpusProvider {
+  // The Postgres-backed provider is implemented (see postgres-corpus.ts); wiring
+  // it to a Hyperdrive Postgres client is the next step. Until then the Worker
+  // serves the demo corpus so the endpoint stays runnable.
+  return new DemoCorpusProvider();
 }
 
 export default {

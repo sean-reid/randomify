@@ -1,29 +1,21 @@
-import type { PlatformLink, Song, Facet, Weighted } from '@randomify/shared';
+import type { Facet, PlatformLink, Song } from '@randomify/shared';
 
 /**
- * The corpus, viewed as the hierarchy the sampler walks down:
+ * The corpus as the four-level hierarchy the sampler walks:
  *
  *   facet value -> artist -> release group -> recording
  *
- * Each level returns candidates weighted by the number of streamable songs
- * beneath them, so the sampler core can temper and pick. Implementations back
- * this with the demo dataset (now) or Postgres prefix-sum queries (later).
+ * Each level is picked from a single uniform draw r in [0, 1). Implementations
+ * resolve r against tempered weights: the demo provider with the shared sampler
+ * core, the Postgres provider with the precomputed prefix-sum index. Picking in
+ * the provider (rather than returning candidate lists) keeps a popular facet
+ * from loading thousands of rows per spin.
  */
 export interface CorpusProvider {
-  /** Distinct values of a facet, weighted by streamable songs within each. */
-  facetValues(facet: Facet): Promise<Weighted<string>[]>;
-  /** Artists with songs in the given facet value, optionally excluding some. */
-  artistsInFacet(
-    facet: Facet,
-    facetValue: string,
-    exclude: ReadonlySet<string>,
-  ): Promise<Weighted<string>[]>;
-  /** Release groups by the given artist. */
-  releaseGroups(artistId: string): Promise<Weighted<string>[]>;
-  /** Recordings within the given release group (leaves, weight 1). */
-  recordings(releaseGroupId: string): Promise<Weighted<string>[]>;
-  /** Full song metadata for a recording. */
+  pickFacetValue(facet: Facet, r: number): Promise<string | null>;
+  pickArtist(facet: Facet, facetValue: string, r: number): Promise<string | null>;
+  pickReleaseGroup(artistId: string, r: number): Promise<string | null>;
+  pickRecording(releaseGroupId: string, r: number): Promise<string | null>;
   loadSong(recordingId: string): Promise<Song>;
-  /** Resolved streaming links for a recording. */
   links(recordingId: string): Promise<PlatformLink[]>;
 }
