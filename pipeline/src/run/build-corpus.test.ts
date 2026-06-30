@@ -96,6 +96,24 @@ describe('buildCorpusData', () => {
     expect(corpus.recordings.find((r) => r.id === 'r2')?.year).toBe(1995); // MB year preserved
   });
 
+  it('upgrades a search-fallback link to exact when MB has the streaming URL', () => {
+    const rec1 = {
+      ...rec('r1', 'a1'),
+      streamingLinks: { spotify: 'https://open.spotify.com/track/x' },
+    };
+    const corpus = buildCorpusData(
+      [rec1],
+      new Map([['r1', [exact('deezer'), fallback('spotify'), fallback('tidal')]]]),
+    );
+    const byPlatform = new Map(corpus.links.map((l) => [l.platform, l]));
+    expect(byPlatform.get('spotify')).toMatchObject({
+      url: 'https://open.spotify.com/track/x',
+      kind: 'exact',
+    });
+    // A platform MB has no link for keeps its search fallback.
+    expect(byPlatform.get('tidal')?.kind).toBe('search_fallback');
+  });
+
   it('drops a recording found only on a non-Deezer platform', () => {
     const corpus = buildCorpusData(
       [rec('r1', 'a1')],
