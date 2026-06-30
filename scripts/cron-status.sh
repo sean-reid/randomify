@@ -24,8 +24,11 @@ fi
 
 echo
 echo "== loaded launchd jobs =="
-if launchctl list 2>/dev/null | grep -q com.randomify; then
-  launchctl list 2>/dev/null | grep com.randomify | awk '{printf "  pid=%s\tlast_exit=%s\t%s\n", $1, $2, $3}'
+# Capture first: piping launchctl into `grep -q` would let grep exit early,
+# SIGPIPE launchctl, and trip `set -o pipefail` into a false "none loaded".
+loaded="$(launchctl list 2>/dev/null | grep com.randomify || true)"
+if [ -n "$loaded" ]; then
+  echo "$loaded" | awk '{printf "  pid=%s\tlast_exit=%s\t%s\n", $1, $2, $3}'
 else
   echo "  (none loaded - install with scripts/install-cron.sh <env>)"
 fi
