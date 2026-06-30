@@ -136,10 +136,11 @@
         const candidate = await (prefetched ?? spin(recent));
         prefetched = null;
         const url = candidate.song.previewUrl;
-        // Validate the preview and warm the cover together, so a committed song
+        // Only commit a song we can actually play: it must have a preview and it
+        // must load. Validate and warm the cover together so a committed song
         // shows art and title in sync.
         const [playable] = await Promise.all([
-          url ? isPreviewLive(url) : Promise.resolve(true),
+          url ? isPreviewLive(url) : Promise.resolve(false),
           loadCover(candidate.song.coverArtUrl),
         ]);
         if (playable) {
