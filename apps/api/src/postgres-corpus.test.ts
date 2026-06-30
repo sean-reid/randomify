@@ -144,6 +144,19 @@ describe('PostgresCorpusProvider', () => {
     provider = new PostgresCorpusProvider(client);
   });
 
+  it('ping resolves when the corpus has recordings', async () => {
+    await expect(provider.ping()).resolves.toBeUndefined();
+  });
+
+  it('ping rejects when the corpus is empty', async () => {
+    const empty = new PGlite();
+    await exportCorpus(empty, { ...corpusData(), recordings: [], links: [] });
+    const emptyProvider = new PostgresCorpusProvider({
+      query: (sql, params) => empty.query(sql, params),
+    });
+    await expect(emptyProvider.ping()).rejects.toThrow();
+  });
+
   it('walks to valid songs from the seeded corpus', async () => {
     const rng = mulberry32(1);
     const ids = new Set<string>();

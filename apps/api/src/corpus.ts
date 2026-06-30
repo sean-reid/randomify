@@ -12,6 +12,8 @@ import type { Facet, PlatformLink, Song } from '@randomify/shared';
  * from loading thousands of rows per spin.
  */
 export interface CorpusProvider {
+  /** Cheap liveness check that the corpus is reachable; rejects if it is not. */
+  ping(): Promise<void>;
   pickFacetValue(facet: Facet, r: number): Promise<string | null>;
   pickArtist(facet: Facet, facetValue: string, r: number): Promise<string | null>;
   pickReleaseGroup(artistId: string, r: number): Promise<string | null>;

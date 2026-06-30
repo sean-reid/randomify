@@ -258,6 +258,10 @@ function pick(nodes: Weighted<string>[], r: number): string | null {
 export class DemoCorpusProvider implements CorpusProvider {
   private readonly byRecording = new Map(DEMO_SONGS.map((s) => [s.recordingId, s]));
 
+  ping(): Promise<void> {
+    return Promise.resolve();
+  }
+
   pickFacetValue(facet: Facet, r: number): Promise<string | null> {
     return Promise.resolve(pick(tally(DEMO_SONGS.flatMap((s) => facetValuesOf(s, facet))), r));
   }
