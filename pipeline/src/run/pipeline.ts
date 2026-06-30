@@ -17,7 +17,9 @@ export interface PipelineOptions {
    * How to read recordings from `ingestDir`. Defaults to the simplified
    * TSV ingest; the local catalog load passes `extractMusicBrainz`.
    */
-  ingestor?: (dir: string) => Promise<NormalizedRecording[]>;
+  ingestor?: (dir: string, limit?: number) => Promise<NormalizedRecording[]>;
+  /** Cap rows materialized by the ingestor (memory bound for a sample run). */
+  extractLimit?: number;
   /** Resolvers to use (defaults to the full registry). */
   resolvers?: readonly PlatformResolver[];
   /** Permanent resolution cache so re-runs only resolve what is new. */
@@ -44,7 +46,7 @@ export async function runPipeline(options: PipelineOptions): Promise<PipelineSum
   const resolvers = options.resolvers ?? RESOLVERS;
   const ingestor = options.ingestor ?? ingest;
 
-  const ingested = await ingestor(options.ingestDir);
+  const ingested = await ingestor(options.ingestDir, options.extractLimit);
   const ordered = prioritize(ingested);
   const batch = options.limit ? ordered.slice(0, options.limit) : ordered;
 
