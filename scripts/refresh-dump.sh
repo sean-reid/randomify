@@ -19,8 +19,11 @@ TABLES=(recording isrc artist artist_credit_name track medium release release_gr
 # dump, extracted into the same mbdump/ dir; the extractor treats them as optional.
 DERIVED_TABLES=(release_group_meta genre tag release_group_tag)
 
+# Remove the (large) dump scratch on exit; run_job calls this alongside the lock
+# release, so a killed run never leaves the ~20GB dump behind.
+job_cleanup() { rm -rf "$SCRATCH"; }
+
 job() {
-  trap 'rm -rf "$SCRATCH"' EXIT
   rm -rf "$SCRATCH"
   mkdir -p "$SCRATCH"
 
