@@ -261,6 +261,30 @@
       ><path d="M6 5h4v14H6zM14 5h4v14h-4z" fill="currentColor" /></svg
     >
   {/snippet}
+  {#snippet prevIcon()}
+    <svg viewBox="0 0 24 24" aria-hidden="true"
+      ><path
+        d="M15 5l-7 7 7 7"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      /></svg
+    >
+  {/snippet}
+  {#snippet nextIcon()}
+    <svg viewBox="0 0 24 24" aria-hidden="true"
+      ><path
+        d="M9 5l7 7-7 7"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      /></svg
+    >
+  {/snippet}
 
   <section class="stage" aria-live="polite">
     {#if current}
@@ -310,8 +334,10 @@
             onclick={() => go(prev)}
             disabled={!canPrev}
             aria-label="Previous song"
-            data-testid="prev">‹</button
+            data-testid="prev"
           >
+            {@render prevIcon()}
+          </button>
           <button
             class="ctrl play"
             onclick={togglePlay}
@@ -321,9 +347,9 @@
           >
             {@render (playing ? pauseIcon : playIcon)()}
           </button>
-          <button class="ctrl" onclick={() => go(next)} aria-label="Next song" data-testid="next"
-            >›</button
-          >
+          <button class="ctrl" onclick={() => go(next)} aria-label="Next song" data-testid="next">
+            {@render nextIcon()}
+          </button>
         </div>
 
         <ul class="links" data-testid="links">
@@ -515,8 +541,6 @@
     border-radius: 999px;
     width: 2.5rem;
     height: 2.5rem;
-    font-size: 1.5rem;
-    line-height: 1;
     color: var(--ink);
     cursor: pointer;
     display: inline-flex;
@@ -526,6 +550,11 @@
       border-color 0.15s ease,
       background 0.15s ease,
       opacity 0.15s ease;
+  }
+
+  .ctrl :global(svg) {
+    width: 18px;
+    height: 18px;
   }
 
   .ctrl:hover:not(:disabled) {
