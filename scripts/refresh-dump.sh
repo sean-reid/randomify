@@ -13,24 +13,33 @@ source "$DIR/lib.sh"
 load_env "$ENV"
 
 SCRATCH="$RANDOMIFY_REPO/data/musicbrainz/scratch-$ENV"
-# Tables the extractor needs. release_group_meta (year) is NOT in the core dump,
-# so it is omitted here; the extractor treats it as optional.
+# Entity tables from the core dump.
 TABLES=(recording isrc artist artist_credit_name track medium release release_group area language)
+# Year (release_group_meta) and genres (genre/tag tables) live in the derived
+# dump, extracted into the same mbdump/ dir; the extractor treats them as optional.
+DERIVED_TABLES=(release_group_meta genre tag release_group_tag)
 
 job() {
   trap 'rm -rf "$SCRATCH"' EXIT
   rm -rf "$SCRATCH"
   mkdir -p "$SCRATCH"
 
-  local latest base
+  local latest base members=() t
   latest="$(curl -fsSL https://data.metabrainz.org/pub/musicbrainz/data/fullexport/LATEST)"
   base="https://data.metabrainz.org/pub/musicbrainz/data/fullexport/$latest"
-  curl -fSL -o "$SCRATCH/mbdump.tar.bz2" "$base/mbdump.tar.bz2"
 
-  local members=() t
+  # Core dump.
+  curl -fSL -o "$SCRATCH/mbdump.tar.bz2" "$base/mbdump.tar.bz2"
   for t in "${TABLES[@]}"; do members+=("mbdump/$t"); done
   tar xjf "$SCRATCH/mbdump.tar.bz2" -C "$SCRATCH" "${members[@]}"
   rm -f "$SCRATCH/mbdump.tar.bz2" # free the compressed dump immediately
+
+  # Derived dump (year + genres).
+  curl -fSL -o "$SCRATCH/mbdump-derived.tar.bz2" "$base/mbdump-derived.tar.bz2"
+  members=()
+  for t in "${DERIVED_TABLES[@]}"; do members+=("mbdump/$t"); done
+  tar xjf "$SCRATCH/mbdump-derived.tar.bz2" -C "$SCRATCH" "${members[@]}"
+  rm -f "$SCRATCH/mbdump-derived.tar.bz2"
 
   pnpm --dir "$RANDOMIFY_REPO" --filter @randomify/pipeline build >/dev/null
   MB_DUMP_DIR="$SCRATCH/mbdump" \

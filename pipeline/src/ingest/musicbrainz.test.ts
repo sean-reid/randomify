@@ -5,7 +5,7 @@ import { extractMusicBrainz } from './musicbrainz.js';
 const DUMP_DIR = fileURLToPath(new URL('../../fixtures/mbdump', import.meta.url));
 
 describe('extractMusicBrainz', () => {
-  it('extracts ISRC-bearing recordings, joined to artist, release group, year, country, language', async () => {
+  it('extracts ISRC-bearing recordings, joined to artist, release group, year, country, language, genres', async () => {
     const rows = await extractMusicBrainz(DUMP_DIR);
 
     // Only the ISRC-bearing recording survives; the one without an ISRC is dropped.
@@ -22,7 +22,9 @@ describe('extractMusicBrainz', () => {
       isrc: 'GBAYE6700477',
       country: 'United Kingdom',
       language: 'eng',
-      genres: [],
+      // Genre tags on the release group, most-voted first; the non-genre tag
+      // (favourites) and the untagged genre (electronic) are excluded.
+      genres: ['rock', 'alternative'],
     });
   });
 });
