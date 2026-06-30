@@ -1,5 +1,4 @@
-import type { CorpusProvider } from './corpus.js';
-import { DemoCorpusProvider } from './demo-corpus.js';
+import { getCorpus } from './corpus-factory.js';
 import { handleSpin } from './spin.js';
 import type { Env } from './env.js';
 
@@ -27,15 +26,8 @@ function parseExclude(raw: string | null): Set<string> {
   );
 }
 
-function getCorpus(_env: Env): CorpusProvider {
-  // The Postgres-backed provider is implemented (see postgres-corpus.ts); wiring
-  // it to a Hyperdrive Postgres client is the next step. Until then the Worker
-  // serves the demo corpus so the endpoint stays runnable.
-  return new DemoCorpusProvider();
-}
-
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: CORS_HEADERS });
     }
@@ -49,8 +41,15 @@ export default {
     if (url.pathname === '/spin') {
       if (request.method !== 'GET') return json({ error: 'method not allowed' }, 405);
       const exclude = parseExclude(url.searchParams.get('exclude'));
-      const result = await handleSpin(getCorpus(env), { excludeArtistIds: exclude });
-      return json(result);
+      const corpus = getCorpus(env);
+      try {
+        const result = await handleSpin(corpus.provider, { excludeArtistIds: exclude });
+        return json(result);
+      } catch {
+        return json({ error: 'corpus unavailable' }, 503);
+      } finally {
+        ctx.waitUntil(corpus.close().catch(() => {}));
+      }
     }
 
     return json({ error: 'not found' }, 404);
