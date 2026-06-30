@@ -71,9 +71,12 @@ export class PostgresCorpusProvider implements CorpusProvider {
 
   pickRecording(releaseGroupId: string, r: number): Promise<string | null> {
     return this.one(
+      // Clamp to the partition size so r approaching 1.0 (floor(r*m)+1 = m+1)
+      // still lands on the last recording instead of missing every row.
       `WITH t AS (SELECT max(cum_index) AS m FROM release_group_recording WHERE release_group_id = $1)
        SELECT recording_id FROM release_group_recording, t
-       WHERE release_group_id = $1 AND cum_index = floor($2::double precision * t.m)::int + 1`,
+       WHERE release_group_id = $1
+         AND cum_index = LEAST(floor($2::double precision * t.m)::int + 1, t.m)`,
       [releaseGroupId, r],
       'recording_id',
     );
@@ -113,15 +116,19 @@ export class PostgresCorpusProvider implements CorpusProvider {
       `SELECT platform, url, kind FROM platform_link WHERE recording_id = $1`,
       [recordingId],
     );
-    const order = new Map(PLATFORMS_ORDER.map((id, i) => [id, i]));
     return rows
       .map((row) => ({
         platform: row.platform as PlatformId,
         url: String(row.url),
         kind: row.kind as LinkKind,
       }))
-      .sort((a, b) => (order.get(a.platform) ?? 99) - (order.get(b.platform) ?? 99));
+      .sort(
+        (a, b) => (PLATFORM_ORDER.get(a.platform) ?? 99) - (PLATFORM_ORDER.get(b.platform) ?? 99),
+      );
   }
 }
 
-const PLATFORMS_ORDER: PlatformId[] = Object.keys(PLATFORM_BY_ID) as PlatformId[];
+// Registry display order, built once (not per request).
+const PLATFORM_ORDER = new Map(
+  (Object.keys(PLATFORM_BY_ID) as PlatformId[]).map((id, i) => [id, i]),
+);
