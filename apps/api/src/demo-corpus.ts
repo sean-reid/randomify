@@ -1,6 +1,8 @@
 import {
+  DEFAULT_ALPHA,
   PLATFORMS,
   searchLink,
+  weightedPick,
   type Facet,
   type PlatformLink,
   type Song,
@@ -246,32 +248,46 @@ function weightedByKey<K extends string>(
   return tally(songs.map(keyOf));
 }
 
+/** Pick one weighted value from a single draw r in [0, 1), or null if empty. */
+function pick(nodes: Weighted<string>[], r: number): string | null {
+  return nodes.length ? weightedPick(nodes, DEFAULT_ALPHA, () => r) : null;
+}
+
 export class DemoCorpusProvider implements CorpusProvider {
   private readonly byRecording = new Map(DEMO_SONGS.map((s) => [s.recordingId, s]));
 
-  facetValues(facet: Facet): Promise<Weighted<string>[]> {
-    return Promise.resolve(tally(DEMO_SONGS.flatMap((s) => facetValuesOf(s, facet))));
+  pickFacetValue(facet: Facet, r: number): Promise<string | null> {
+    return Promise.resolve(pick(tally(DEMO_SONGS.flatMap((s) => facetValuesOf(s, facet))), r));
   }
 
-  artistsInFacet(
-    facet: Facet,
-    facetValue: string,
-    exclude: ReadonlySet<string>,
-  ): Promise<Weighted<string>[]> {
+  pickArtist(facet: Facet, facetValue: string, r: number): Promise<string | null> {
     const inFacet = DEMO_SONGS.filter((s) => facetValuesOf(s, facet).includes(facetValue));
-    const kept = inFacet.filter((s) => !exclude.has(s.artistId));
-    const pool = kept.length > 0 ? kept : inFacet;
-    return Promise.resolve(weightedByKey(pool, (s) => s.artistId));
+    return Promise.resolve(
+      pick(
+        weightedByKey(inFacet, (s) => s.artistId),
+        r,
+      ),
+    );
   }
 
-  releaseGroups(artistId: string): Promise<Weighted<string>[]> {
+  pickReleaseGroup(artistId: string, r: number): Promise<string | null> {
     const songs = DEMO_SONGS.filter((s) => s.artistId === artistId);
-    return Promise.resolve(weightedByKey(songs, (s) => s.releaseGroupId));
+    return Promise.resolve(
+      pick(
+        weightedByKey(songs, (s) => s.releaseGroupId),
+        r,
+      ),
+    );
   }
 
-  recordings(releaseGroupId: string): Promise<Weighted<string>[]> {
+  pickRecording(releaseGroupId: string, r: number): Promise<string | null> {
     const songs = DEMO_SONGS.filter((s) => s.releaseGroupId === releaseGroupId);
-    return Promise.resolve(songs.map((s) => ({ value: s.recordingId, descendantCount: 1 })));
+    return Promise.resolve(
+      pick(
+        songs.map((s) => ({ value: s.recordingId, descendantCount: 1 })),
+        r,
+      ),
+    );
   }
 
   loadSong(recordingId: string): Promise<Song> {
