@@ -15,7 +15,7 @@ load_env "$ENV"
 SCRATCH="$RANDOMIFY_REPO/data/musicbrainz/scratch-$ENV"
 # Entity tables from the core dump. genre is a core entity (NOT in the derived
 # dump), so it must be extracted here alongside the other entities.
-TABLES=(recording isrc artist artist_credit_name track medium release release_group area language genre)
+TABLES=(recording isrc artist artist_credit_name track medium release release_group area language genre l_recording_url l_release_url url)
 # Year (release_group_meta) and tag votes (tag/release_group_tag) live in the
 # derived dump, extracted into the same mbdump/ dir; both treated as optional.
 DERIVED_TABLES=(release_group_meta tag release_group_tag)

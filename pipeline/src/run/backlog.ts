@@ -22,11 +22,13 @@ CREATE TABLE IF NOT EXISTS recording_backlog (
   country           TEXT,
   language          TEXT,
   genres            TEXT[] NOT NULL DEFAULT '{}',
+  streaming_links   TEXT,
   priority          INTEGER NOT NULL,
   resolved_at       TIMESTAMPTZ
 );
 CREATE INDEX IF NOT EXISTS recording_backlog_unresolved
   ON recording_backlog (priority) WHERE resolved_at IS NULL;
+ALTER TABLE recording_backlog ADD COLUMN IF NOT EXISTS streaming_links TEXT;
 `;
 
 const CHUNK = 1000;
@@ -72,6 +74,7 @@ export async function populateBacklog(
         r.country,
         r.language,
         toPgArray(r.genres),
+        JSON.stringify(r.streamingLinks ?? {}),
         start + i,
       ];
       const ph = vals.map((v) => {
@@ -83,14 +86,15 @@ export async function populateBacklog(
     await client.query(
       `INSERT INTO recording_backlog
          (recording_id, artist_id, artist, release_group_id, release_title, title,
-          isrc, duration_ms, year, country, language, genres, priority)
+          isrc, duration_ms, year, country, language, genres, streaming_links, priority)
        VALUES ${tuples.join(', ')}
        ON CONFLICT (recording_id) DO UPDATE SET
          artist_id = EXCLUDED.artist_id, artist = EXCLUDED.artist,
          release_group_id = EXCLUDED.release_group_id, release_title = EXCLUDED.release_title,
          title = EXCLUDED.title, isrc = EXCLUDED.isrc, duration_ms = EXCLUDED.duration_ms,
          year = EXCLUDED.year, country = EXCLUDED.country, language = EXCLUDED.language,
-         genres = EXCLUDED.genres, priority = EXCLUDED.priority`,
+         genres = EXCLUDED.genres, streaming_links = EXCLUDED.streaming_links,
+         priority = EXCLUDED.priority`,
       params,
     );
   }
@@ -103,7 +107,7 @@ export async function selectUnresolved(
 ): Promise<NormalizedRecording[]> {
   const { rows } = await client.query(
     `SELECT recording_id, artist_id, artist, release_group_id, release_title, title,
-            isrc, duration_ms, year, country, language, genres
+            isrc, duration_ms, year, country, language, genres, streaming_links
      FROM recording_backlog WHERE resolved_at IS NULL ORDER BY priority LIMIT $1`,
     [limit],
   );
@@ -120,6 +124,7 @@ export async function selectUnresolved(
     country: row.country == null ? null : String(row.country),
     language: row.language == null ? null : String(row.language),
     genres: Array.isArray(row.genres) ? row.genres.map(String) : [],
+    streamingLinks: row.streaming_links ? JSON.parse(String(row.streaming_links)) : {},
   }));
 }
 

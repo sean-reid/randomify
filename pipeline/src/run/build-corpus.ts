@@ -80,14 +80,28 @@ export function buildCorpusData(
       previewUrl,
       genres: recording.genres,
     });
+    const mbLinks = recording.streamingLinks ?? {};
     for (const resolution of resolutionsByRecording.get(recording.recordingId) ?? []) {
-      links.push({
-        recordingId: recording.recordingId,
-        platform: resolution.platform,
-        url: resolution.url,
-        kind: resolution.kind,
-        confidence: resolution.confidence,
-      });
+      // Upgrade a platform's search fallback to an exact link when MusicBrainz
+      // has its streaming URL. Resolver exacts (e.g. Deezer) are left intact.
+      const mbUrl = mbLinks[resolution.platform];
+      if (resolution.kind === 'search_fallback' && mbUrl) {
+        links.push({
+          recordingId: recording.recordingId,
+          platform: resolution.platform,
+          url: mbUrl,
+          kind: 'exact',
+          confidence: 0.9,
+        });
+      } else {
+        links.push({
+          recordingId: recording.recordingId,
+          platform: resolution.platform,
+          url: resolution.url,
+          kind: resolution.kind,
+          confidence: resolution.confidence,
+        });
+      }
     }
     streamable.push({
       recordingId: recording.recordingId,

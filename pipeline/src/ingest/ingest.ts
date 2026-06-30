@@ -15,6 +15,8 @@ export interface NormalizedRecording {
   country: string | null;
   language: string | null;
   genres: string[];
+  /** Exact streaming URLs by platform id, from MusicBrainz URL relationships. */
+  streamingLinks?: Record<string, string>;
 }
 
 /**

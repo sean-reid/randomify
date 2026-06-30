@@ -25,6 +25,12 @@ describe('extractMusicBrainz', () => {
       // Genre tags on the release group, most-voted first; the non-genre tag
       // (favourites) and the untagged genre (electronic) are excluded.
       genres: ['rock', 'alternative'],
+      // Streaming links from URL relationships: spotify from the recording-level
+      // link, apple_music from the chosen release's album-level link.
+      streamingLinks: {
+        spotify: 'https://open.spotify.com/track/abc',
+        apple_music: 'https://music.apple.com/us/album/xyz',
+      },
     });
   });
 });
