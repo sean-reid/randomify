@@ -13,6 +13,12 @@ function decadeOf(year: number | null): string | null {
   return year == null ? null : `${Math.floor(year / 10) * 10}s`;
 }
 
+/** Deezer track id from a deezer.com/track/{id} link, for the preview proxy. */
+function deezerTrackId(url: string): string | null {
+  const match = /deezer\.com\/track\/(\d+)/.exec(url);
+  return match ? match[1]! : null;
+}
+
 /**
  * Assemble the serving corpus from resolved recordings. A recording is kept only
  * if it was found on Deezer (an exact Deezer link) - that is the catalog we can
@@ -35,14 +41,17 @@ export function buildCorpusData(
   const streamable: StreamableRecording[] = [];
 
   for (const recording of streamableRecordings) {
-    // Preview and cover art are song-level, carried on the exact link that
-    // exposed them (Deezer); prefer it, else the first exact link that has them.
-    const exact = (resolutionsByRecording.get(recording.recordingId) ?? [])
-      .filter((r) => r.kind === 'exact')
-      .sort((a, b) => (a.platform === 'deezer' ? -1 : 0) - (b.platform === 'deezer' ? -1 : 0));
-    const media = exact.find((r) => r.previewUrl || r.coverArtUrl);
+    // Preview, cover art, and year are carried on the Deezer exact link (the
+    // corpus requires one). The preview URL itself expires, so store only the
+    // stable /preview/{id} proxy path; the API mints a fresh URL at play time.
+    const deezerExact = (resolutionsByRecording.get(recording.recordingId) ?? []).find(
+      (r) => r.kind === 'exact' && r.platform === 'deezer',
+    );
+    const trackId = deezerExact ? deezerTrackId(deezerExact.url) : null;
+    const previewUrl = deezerExact?.previewUrl && trackId ? `/preview/${trackId}` : null;
+    const coverArtUrl = deezerExact?.coverArtUrl ?? null;
     // The MB core dump has no year; fall back to the platform's release year.
-    const year = recording.year ?? exact.find((r) => r.year != null)?.year ?? null;
+    const year = recording.year ?? deezerExact?.year ?? null;
 
     artists.set(recording.artistId, {
       id: recording.artistId,
@@ -64,8 +73,8 @@ export function buildCorpusData(
       durationMs: recording.durationMs,
       year,
       language: recording.language,
-      coverArtUrl: media?.coverArtUrl ?? null,
-      previewUrl: media?.previewUrl ?? null,
+      coverArtUrl,
+      previewUrl,
       genres: recording.genres,
     });
     for (const resolution of resolutionsByRecording.get(recording.recordingId) ?? []) {

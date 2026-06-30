@@ -22,7 +22,7 @@ function rec(id: string, artistId: string): NormalizedRecording {
 
 const exact = (platform: Resolution['platform']): Resolution => ({
   platform,
-  url: `https://x/${platform}`,
+  url: platform === 'deezer' ? 'https://www.deezer.com/track/123' : `https://x/${platform}`,
   kind: 'exact',
   confidence: 1,
   strategy: 'fake',
@@ -50,16 +50,16 @@ describe('buildCorpusData', () => {
     expect(corpus.weights.facetValues.length).toBeGreaterThan(0);
   });
 
-  it('attaches preview and cover art from the exact link, preferring deezer', () => {
+  it('stores the stable proxy path and cover art from the Deezer exact link', () => {
     const tidal: Resolution = { ...exact('tidal'), previewUrl: 'https://t/mp3' };
     const deezer: Resolution = {
       ...exact('deezer'),
-      previewUrl: 'https://d/mp3',
+      previewUrl: 'https://cdnt-preview.dzcdn.net/whatever.mp3?hdnea=exp=1~hmac=2',
       coverArtUrl: 'https://d/jpg',
     };
     const corpus = buildCorpusData([rec('r1', 'a1')], new Map([['r1', [tidal, deezer]]]));
     expect(corpus.recordings[0]).toMatchObject({
-      previewUrl: 'https://d/mp3',
+      previewUrl: '/preview/123', // ephemeral URL replaced by the stable proxy path
       coverArtUrl: 'https://d/jpg',
     });
   });
