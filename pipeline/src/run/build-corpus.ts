@@ -34,6 +34,15 @@ export function buildCorpusData(
   const streamable: StreamableRecording[] = [];
 
   for (const recording of streamableRecordings) {
+    // Preview and cover art are song-level, carried on the exact link that
+    // exposed them (Deezer); prefer it, else the first exact link that has them.
+    const exact = (resolutionsByRecording.get(recording.recordingId) ?? [])
+      .filter((r) => r.kind === 'exact')
+      .sort((a, b) => (a.platform === 'deezer' ? -1 : 0) - (b.platform === 'deezer' ? -1 : 0));
+    const media = exact.find((r) => r.previewUrl || r.coverArtUrl);
+    // The MB core dump has no year; fall back to the platform's release year.
+    const year = recording.year ?? exact.find((r) => r.year != null)?.year ?? null;
+
     artists.set(recording.artistId, {
       id: recording.artistId,
       name: recording.artist,
@@ -43,7 +52,7 @@ export function buildCorpusData(
       id: recording.releaseGroupId,
       artistId: recording.artistId,
       title: recording.releaseTitle,
-      year: recording.year,
+      year,
     });
     recordingRows.push({
       id: recording.recordingId,
@@ -52,9 +61,10 @@ export function buildCorpusData(
       title: recording.title,
       isrc: recording.isrc,
       durationMs: recording.durationMs,
-      year: recording.year,
+      year,
       language: recording.language,
-      coverArtUrl: null,
+      coverArtUrl: media?.coverArtUrl ?? null,
+      previewUrl: media?.previewUrl ?? null,
       genres: recording.genres,
     });
     for (const resolution of resolutionsByRecording.get(recording.recordingId) ?? []) {
@@ -71,7 +81,7 @@ export function buildCorpusData(
       artistId: recording.artistId,
       releaseGroupId: recording.releaseGroupId,
       genres: recording.genres,
-      decade: decadeOf(recording.year),
+      decade: decadeOf(year),
       country: recording.country,
       language: recording.language,
     });

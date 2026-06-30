@@ -21,7 +21,11 @@ interface DeezerTrack {
   duration?: number;
   isrc?: string;
   artist?: { name?: string };
-  album?: { title?: string };
+  album?: { title?: string; cover_big?: string; cover_xl?: string };
+  /** 30-second preview MP3. */
+  preview?: string;
+  /** Release date, "YYYY-MM-DD"; used as a year fallback when MB has none. */
+  release_date?: string;
   /** Present when Deezer reports an error (e.g. ISRC not found). */
   error?: unknown;
 }
@@ -33,6 +37,9 @@ function toCandidate(track: DeezerTrack | undefined, trusted: boolean): Candidat
   return {
     url: track.link,
     trusted,
+    previewUrl: track.preview ?? null,
+    coverArtUrl: track.album?.cover_xl ?? track.album?.cover_big ?? null,
+    year: track.release_date ? Number(track.release_date.slice(0, 4)) || null : null,
     matched: {
       isrc: track.isrc ?? null,
       artist: track.artist.name,

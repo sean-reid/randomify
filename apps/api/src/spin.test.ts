@@ -81,6 +81,7 @@ describe('handleSpin', () => {
           isrc: null,
           durationMs: null,
           coverArtUrl: null,
+          previewUrl: null,
           genres: [],
         }),
       links: () => Promise.resolve([]),

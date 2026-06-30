@@ -39,6 +39,7 @@ function sampleData(): CorpusData {
         year: 1995,
         language: 'eng',
         coverArtUrl: null,
+        previewUrl: null,
         genres: ['rock'],
       },
       {
@@ -51,6 +52,7 @@ function sampleData(): CorpusData {
         year: 1995,
         language: 'eng',
         coverArtUrl: null,
+        previewUrl: null,
         genres: ['bossa nova', 'jazz'],
       },
     ],

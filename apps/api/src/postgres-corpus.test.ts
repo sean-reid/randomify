@@ -120,6 +120,7 @@ function corpusData(): CorpusData {
       year: s.year,
       language: s.language,
       coverArtUrl: null,
+      previewUrl: null,
       genres: s.genres,
     })),
     links: SEEDS.map((s) => ({

@@ -50,6 +50,38 @@ describe('buildCorpusData', () => {
     expect(corpus.weights.facetValues.length).toBeGreaterThan(0);
   });
 
+  it('attaches preview and cover art from the exact link, preferring deezer', () => {
+    const tidal: Resolution = { ...exact('tidal'), previewUrl: 'https://t/mp3' };
+    const deezer: Resolution = {
+      ...exact('deezer'),
+      previewUrl: 'https://d/mp3',
+      coverArtUrl: 'https://d/jpg',
+    };
+    const corpus = buildCorpusData([rec('r1', 'a1')], new Map([['r1', [tidal, deezer]]]));
+    expect(corpus.recordings[0]).toMatchObject({
+      previewUrl: 'https://d/mp3',
+      coverArtUrl: 'https://d/jpg',
+    });
+  });
+
+  it('leaves preview and cover null when no exact link carries them', () => {
+    const corpus = buildCorpusData([rec('r1', 'a1')], new Map([['r1', [exact('deezer')]]]));
+    expect(corpus.recordings[0]?.previewUrl).toBeNull();
+    expect(corpus.recordings[0]?.coverArtUrl).toBeNull();
+  });
+
+  it('fills year from the exact link when MusicBrainz has none, but MB year wins', () => {
+    const noYear = { ...rec('r1', 'a1'), year: null };
+    const withYear = { ...rec('r2', 'a2'), year: 1995 };
+    const resolutions = new Map<string, Resolution[]>([
+      ['r1', [{ ...exact('deezer'), year: 1997 }]],
+      ['r2', [{ ...exact('deezer'), year: 2000 }]],
+    ]);
+    const corpus = buildCorpusData([noYear, withYear], resolutions);
+    expect(corpus.recordings.find((r) => r.id === 'r1')?.year).toBe(1997); // filled from Deezer
+    expect(corpus.recordings.find((r) => r.id === 'r2')?.year).toBe(1995); // MB year preserved
+  });
+
   it('produces an empty corpus when nothing is streamable', () => {
     const corpus = buildCorpusData([rec('r1', 'a1')], new Map([['r1', [fallback('deezer')]]]));
     expect(corpus.recordings).toHaveLength(0);

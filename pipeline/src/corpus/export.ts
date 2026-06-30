@@ -28,6 +28,7 @@ export interface CorpusRecording {
   year: number | null;
   language: string | null;
   coverArtUrl: string | null;
+  previewUrl: string | null;
   genres: string[];
 }
 export interface CorpusLink {
@@ -122,6 +123,7 @@ export async function exportCorpus(client: SqlClient, data: CorpusData): Promise
         'year',
         'language',
         'cover_art_url',
+        'preview_url',
         'genres',
       ],
       data.recordings.map((r) => [
@@ -134,6 +136,7 @@ export async function exportCorpus(client: SqlClient, data: CorpusData): Promise
         r.year,
         r.language,
         r.coverArtUrl,
+        r.previewUrl,
         toPgArray(r.genres),
       ]),
     );

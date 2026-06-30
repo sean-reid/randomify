@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS recording (
   year              INTEGER,
   language          TEXT,
   cover_art_url     TEXT,
+  preview_url       TEXT,
   genres            TEXT[] NOT NULL DEFAULT '{}'
 );
 

@@ -19,6 +19,11 @@ export interface Candidate {
   matched: Fingerprint;
   /** True when matched by ISRC and needs no fuzzy verification. */
   trusted?: boolean;
+  /** Song-level preview MP3 and cover art, when the platform exposes them. */
+  previewUrl?: string | null;
+  coverArtUrl?: string | null;
+  /** Release year from the platform, a fallback when MusicBrainz has none. */
+  year?: number | null;
 }
 
 /** One way to find a track on a platform (ISRC lookup, search, internal API). */
@@ -44,4 +49,9 @@ export interface Resolution {
   confidence: number;
   /** Name of the strategy that produced the link, or null for a fallback. */
   strategy: string | null;
+  /** Song-level preview MP3 and cover art carried from the matched track. */
+  previewUrl?: string | null;
+  coverArtUrl?: string | null;
+  /** Release year from the platform, a fallback when MusicBrainz has none. */
+  year?: number | null;
 }
