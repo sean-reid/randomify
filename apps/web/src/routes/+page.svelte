@@ -230,11 +230,11 @@
     }
   }
 
+  // Genres are intentionally not surfaced yet: MusicBrainz only tags ~half the
+  // release groups, so the line was blank too often. Show just the year until
+  // there is a better genre source. Genre data is still stored on the song.
   function meta(s: Song): string {
-    const parts: string[] = [];
-    if (s.year) parts.push(String(s.year));
-    if (s.genres.length) parts.push(s.genres.slice(0, 2).join(', '));
-    return parts.join('  ·  ');
+    return s.year ? String(s.year) : '';
   }
 
   function initial(s: Song): string {
