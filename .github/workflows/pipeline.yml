@@ -1,0 +1,45 @@
+name: Corpus pipeline
+
+on:
+  schedule:
+    - cron: '0 6 * * *' # daily; grows the population a batch at a time
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: Max recordings to resolve this run
+        required: false
+
+# Off until the corpus database exists. Set the repo variable
+# PIPELINE_ENABLED=true and provide DATABASE_URL once Neon is provisioned.
+concurrency:
+  group: pipeline
+  cancel-in-progress: false
+
+jobs:
+  run:
+    name: Ingest, resolve, export
+    if: ${{ vars.PIPELINE_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      DATABASE_URL: ${{ secrets.CORPUS_DATABASE_URL }}
+      LIMIT: ${{ github.event.inputs.limit }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @randomify/shared build
+      - run: pnpm --filter @randomify/pipeline build
+
+      # Extracted MusicBrainz TSVs. Sync the latest dump subset from R2 here,
+      # then point INGEST_DIR at it. Until that step lands, the run uses the
+      # committed sample fixture.
+      - name: Resolve ingest directory
+        run: echo "INGEST_DIR=pipeline/fixtures/mb-sample" >> "$GITHUB_ENV"
+
+      - name: Run pipeline
+        run: node pipeline/dist/run/run.js

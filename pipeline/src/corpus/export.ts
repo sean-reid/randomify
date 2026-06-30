@@ -5,8 +5,6 @@ import type { CorpusWeights } from './weights.js';
 /** Minimal Postgres client surface, satisfied by node-postgres and PGlite. */
 export interface SqlClient {
   query(sql: string, params?: unknown[]): Promise<{ rows: Record<string, unknown>[] }>;
-  /** Optional multi-statement runner (PGlite). */
-  exec?(sql: string): Promise<unknown>;
 }
 
 export interface CorpusArtist {
@@ -48,19 +46,18 @@ export interface CorpusData {
   weights: CorpusWeights;
 }
 
-async function run(client: SqlClient, sql: string): Promise<void> {
-  if (client.exec) await client.exec(sql);
-  else await client.query(sql);
-}
-
 /** Format a string list as a Postgres array literal, e.g. {"bossa nova","jazz"}. */
 function toPgArray(items: string[]): string {
   return `{${items.map((s) => `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`).join(',')}}`;
 }
 
-/** Create the corpus tables if they do not exist. */
+/** Create the corpus tables if they do not exist. Runs each DDL statement
+ * separately so it works on clients that reject multi-statement queries. */
 export async function applySchema(client: SqlClient): Promise<void> {
-  await run(client, SCHEMA_SQL);
+  const statements = SCHEMA_SQL.split(';')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  for (const statement of statements) await client.query(statement);
 }
 
 const CHUNK = 500;
@@ -96,7 +93,7 @@ async function insertRows(
  */
 export async function exportCorpus(client: SqlClient, data: CorpusData): Promise<void> {
   await applySchema(client);
-  await run(client, 'BEGIN');
+  await client.query('BEGIN');
   try {
     await client.query(`TRUNCATE ${CORPUS_TABLES.join(', ')}`);
 
@@ -182,9 +179,9 @@ export async function exportCorpus(client: SqlClient, data: CorpusData): Promise
       data.weights.releaseGroupRecordings.map((r) => [r.releaseGroupId, r.recordingId, r.cumIndex]),
     );
 
-    await run(client, 'COMMIT');
+    await client.query('COMMIT');
   } catch (error) {
-    await run(client, 'ROLLBACK');
+    await client.query('ROLLBACK');
     throw error;
   }
 }
