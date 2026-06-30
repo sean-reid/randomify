@@ -10,7 +10,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@randomify/shared": "workspace:*"
+    "@randomify/shared": "workspace:*",
+    "postgres": "^3.4.9"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250101.0",
