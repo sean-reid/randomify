@@ -45,11 +45,16 @@ describe('prioritize', () => {
     expect(ordered[2]!.recordingId).toBe('a1-2');
   });
 
-  it('uses recency as a tiebreak within the same rank', () => {
+  it('round-robins across decades so a truncated load spans eras', () => {
     const ordered = prioritize([
-      rec({ recordingId: 'old', artistId: 'a1', isrc: 'I', year: 1970 }),
-      rec({ recordingId: 'new', artistId: 'a2', isrc: 'I', year: 2010 }),
+      rec({ recordingId: 'r2020a', artistId: 'a1', isrc: 'I', year: 2021 }),
+      rec({ recordingId: 'r2020b', artistId: 'a2', isrc: 'I', year: 2022 }),
+      rec({ recordingId: 'r1980', artistId: 'a3', isrc: 'I', year: 1985 }),
     ]);
-    expect(ordered[0]!.recordingId).toBe('new');
+    // The first two pulls cover two different decades (one 2020s + the 1980s)
+    // rather than both 2020s; the second 2020s recording sorts last.
+    const topDecades = ordered.slice(0, 2).map((r) => Math.floor((r.year ?? 0) / 10) * 10);
+    expect(new Set(topDecades)).toEqual(new Set([2020, 1980]));
+    expect(ordered[2]!.recordingId).toMatch(/^r2020/);
   });
 });
