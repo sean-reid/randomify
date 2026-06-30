@@ -1,4 +1,5 @@
 import type { NormalizedRecording } from '../ingest/ingest.js';
+import { bulkUpsert, toPgArray } from '../corpus/bulk.js';
 import type { SqlClient } from '../corpus/export.js';
 import { prioritize } from './prioritize.js';
 
@@ -31,12 +32,6 @@ CREATE INDEX IF NOT EXISTS recording_backlog_unresolved
 ALTER TABLE recording_backlog ADD COLUMN IF NOT EXISTS streaming_links TEXT;
 `;
 
-const CHUNK = 1000;
-
-function toPgArray(items: string[]): string {
-  return `{${items.map((s) => `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`).join(',')}}`;
-}
-
 export async function applyBacklogSchema(client: SqlClient): Promise<void> {
   for (const stmt of BACKLOG_SCHEMA.split(';')
     .map((s) => s.trim())
@@ -57,47 +52,46 @@ export async function populateBacklog(
   await applyBacklogSchema(client);
   const ordered = prioritize(recordings);
 
-  for (let start = 0; start < ordered.length; start += CHUNK) {
-    const chunk = ordered.slice(start, start + CHUNK);
-    const params: unknown[] = [];
-    const tuples = chunk.map((r, i) => {
-      const vals = [
-        r.recordingId,
-        r.artistId,
-        r.artist,
-        r.releaseGroupId,
-        r.releaseTitle,
-        r.title,
-        r.isrc,
-        r.durationMs,
-        r.year,
-        r.country,
-        r.language,
-        toPgArray(r.genres),
-        JSON.stringify(r.streamingLinks ?? {}),
-        start + i,
-      ];
-      const ph = vals.map((v) => {
-        params.push(v);
-        return `$${params.length}`;
-      });
-      return `(${ph.join(', ')})`;
-    });
-    await client.query(
-      `INSERT INTO recording_backlog
-         (recording_id, artist_id, artist, release_group_id, release_title, title,
-          isrc, duration_ms, year, country, language, genres, streaming_links, priority)
-       VALUES ${tuples.join(', ')}
-       ON CONFLICT (recording_id) DO UPDATE SET
-         artist_id = EXCLUDED.artist_id, artist = EXCLUDED.artist,
-         release_group_id = EXCLUDED.release_group_id, release_title = EXCLUDED.release_title,
-         title = EXCLUDED.title, isrc = EXCLUDED.isrc, duration_ms = EXCLUDED.duration_ms,
-         year = EXCLUDED.year, country = EXCLUDED.country, language = EXCLUDED.language,
-         genres = EXCLUDED.genres, streaming_links = EXCLUDED.streaming_links,
-         priority = EXCLUDED.priority`,
-      params,
-    );
-  }
+  // Priority is the global position in the prioritized list, baked into each
+  // row before the bulk write chunks internally. resolved_at is intentionally
+  // omitted, so an existing row keeps its marker and is not re-queued.
+  await bulkUpsert(
+    client,
+    'recording_backlog',
+    [
+      { name: 'recording_id', type: 'text' },
+      { name: 'artist_id', type: 'text' },
+      { name: 'artist', type: 'text' },
+      { name: 'release_group_id', type: 'text' },
+      { name: 'release_title', type: 'text' },
+      { name: 'title', type: 'text' },
+      { name: 'isrc', type: 'text' },
+      { name: 'duration_ms', type: 'int' },
+      { name: 'year', type: 'int' },
+      { name: 'country', type: 'text' },
+      { name: 'language', type: 'text' },
+      { name: 'genres', type: 'text', cast: 'text[]' },
+      { name: 'streaming_links', type: 'text' },
+      { name: 'priority', type: 'int' },
+    ],
+    ordered.map((r, i) => [
+      r.recordingId,
+      r.artistId,
+      r.artist,
+      r.releaseGroupId,
+      r.releaseTitle,
+      r.title,
+      r.isrc,
+      r.durationMs,
+      r.year,
+      r.country,
+      r.language,
+      toPgArray(r.genres),
+      JSON.stringify(r.streamingLinks ?? {}),
+      i,
+    ]),
+    'recording_id',
+  );
 }
 
 /** Pull the next unresolved chunk, highest priority first. */
