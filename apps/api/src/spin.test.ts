@@ -1,5 +1,6 @@
 import { FACETS, PLATFORMS } from '@randomify/shared';
 import { describe, expect, it } from 'vitest';
+import type { CorpusProvider } from './corpus.js';
 import { DemoCorpusProvider } from './demo-corpus.js';
 import { handleSpin } from './spin.js';
 
@@ -59,5 +60,35 @@ describe('handleSpin', () => {
     const suppressed = await countAppearances(new Set([target]));
     expect(baseline).toBeGreaterThan(0);
     expect(suppressed).toBeLessThan(baseline);
+  });
+
+  it('falls back to a populated facet when others are empty', async () => {
+    // A corpus that only knows decades (e.g. before the genre dump is loaded).
+    const decadeOnly: CorpusProvider = {
+      pickFacetValue: (facet, _r) => Promise.resolve(facet === 'decade' ? '1990s' : null),
+      pickArtist: () => Promise.resolve('a1'),
+      pickReleaseGroup: () => Promise.resolve('rg1'),
+      pickRecording: () => Promise.resolve('r1'),
+      loadSong: (id) =>
+        Promise.resolve({
+          recordingId: id,
+          title: 'Song',
+          artist: 'Artist',
+          artistId: 'a1',
+          releaseTitle: null,
+          releaseGroupId: 'rg1',
+          year: 1995,
+          isrc: null,
+          durationMs: null,
+          coverArtUrl: null,
+          genres: [],
+        }),
+      links: () => Promise.resolve([]),
+    };
+    for (let i = 0; i < 50; i++) {
+      const result = await handleSpin(decadeOnly, { rng: mulberry32(i) });
+      expect(result.facet).toBe('decade');
+      expect(result.song.recordingId).toBe('r1');
+    }
   });
 });

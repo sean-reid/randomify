@@ -1,5 +1,5 @@
 import type { PlatformId } from '@randomify/shared';
-import { ingest } from '../ingest/ingest.js';
+import { ingest, type NormalizedRecording } from '../ingest/ingest.js';
 import { RESOLVERS } from '../resolvers/registry.js';
 import type { PlatformResolver } from '../resolvers/types.js';
 import type { HealthVerdict, RunMetrics } from '../resolvers/health.js';
@@ -9,10 +9,15 @@ import { prioritize } from './prioritize.js';
 import { resolveAll, type ResolutionCache } from './resolve-batch.js';
 
 export interface PipelineOptions {
-  /** Directory of extracted MusicBrainz TSVs. */
+  /** Directory of extracted source data passed to the ingestor. */
   ingestDir: string;
   /** Postgres client to export the rebuilt corpus into. */
   client: SqlClient;
+  /**
+   * How to read recordings from `ingestDir`. Defaults to the simplified
+   * TSV ingest; the local catalog load passes `extractMusicBrainz`.
+   */
+  ingestor?: (dir: string) => Promise<NormalizedRecording[]>;
   /** Resolvers to use (defaults to the full registry). */
   resolvers?: readonly PlatformResolver[];
   /** Permanent resolution cache so re-runs only resolve what is new. */
@@ -37,8 +42,9 @@ export interface PipelineSummary {
  */
 export async function runPipeline(options: PipelineOptions): Promise<PipelineSummary> {
   const resolvers = options.resolvers ?? RESOLVERS;
+  const ingestor = options.ingestor ?? ingest;
 
-  const ingested = await ingest(options.ingestDir);
+  const ingested = await ingestor(options.ingestDir);
   const ordered = prioritize(ingested);
   const batch = options.limit ? ordered.slice(0, options.limit) : ordered;
 
