@@ -8,5 +8,6 @@ export * from './resolvers/index.js';
 export * from './run/prioritize.js';
 export * from './run/resolve-batch.js';
 export * from './run/postgres-cache.js';
+export * from './run/backlog.js';
 export * from './run/build-corpus.js';
 export * from './run/pipeline.js';
