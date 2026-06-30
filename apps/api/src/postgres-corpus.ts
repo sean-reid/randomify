@@ -75,7 +75,8 @@ export class PostgresCorpusProvider implements CorpusProvider {
   async loadSong(recordingId: string): Promise<Song> {
     const { rows } = await this.client.query(
       `SELECT r.id, r.title, r.artist_id, a.name AS artist, r.release_group_id,
-              rg.title AS release_title, r.year, r.isrc, r.duration_ms, r.cover_art_url, r.genres
+              rg.title AS release_title, r.year, r.isrc, r.duration_ms,
+              r.cover_art_url, r.preview_url, r.genres
        FROM recording r
        JOIN artist a ON a.id = r.artist_id
        JOIN release_group rg ON rg.id = r.release_group_id
@@ -95,6 +96,7 @@ export class PostgresCorpusProvider implements CorpusProvider {
       isrc: row.isrc == null ? null : String(row.isrc),
       durationMs: row.duration_ms == null ? null : Number(row.duration_ms),
       coverArtUrl: row.cover_art_url == null ? null : String(row.cover_art_url),
+      previewUrl: row.preview_url == null ? null : String(row.preview_url),
       genres: Array.isArray(row.genres) ? row.genres.map(String) : [],
     };
   }

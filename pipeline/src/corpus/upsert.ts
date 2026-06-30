@@ -74,6 +74,7 @@ export async function upsertCorpus(
       'year',
       'language',
       'cover_art_url',
+      'preview_url',
       'genres',
     ],
     'id',
@@ -87,6 +88,7 @@ export async function upsertCorpus(
       r.year,
       r.language,
       r.coverArtUrl,
+      r.previewUrl,
       toPgArray(r.genres),
     ]),
   );

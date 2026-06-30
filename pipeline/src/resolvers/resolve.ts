@@ -45,6 +45,9 @@ export async function resolvePlatform(
           kind: 'exact',
           confidence: 1,
           strategy: strategy.name,
+          previewUrl: candidate.previewUrl ?? null,
+          coverArtUrl: candidate.coverArtUrl ?? null,
+          year: candidate.year ?? null,
         };
       }
       continue;
@@ -57,6 +60,9 @@ export async function resolvePlatform(
         kind: 'exact',
         confidence: score,
         strategy: strategy.name,
+        previewUrl: candidate.previewUrl ?? null,
+        coverArtUrl: candidate.coverArtUrl ?? null,
+        year: candidate.year ?? null,
       };
     }
   }

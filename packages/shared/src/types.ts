@@ -37,6 +37,8 @@ export interface Song {
   isrc: string | null;
   durationMs: number | null;
   coverArtUrl: string | null;
+  /** 30-second preview MP3 (Deezer) for the in-app player, when available. */
+  previewUrl: string | null;
   genres: string[];
 }
 

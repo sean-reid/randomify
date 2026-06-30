@@ -4,14 +4,24 @@
   import { spin } from '$lib/api';
   import { RecentArtists } from '$lib/recent';
 
-  let current = $state<SpinResponse | null>(null);
+  // A deck of spun songs: you walk back through ones you heard (left) and
+  // forward to discover new ones (right). `index` is the current position.
+  let history = $state<SpinResponse[]>([]);
+  let index = $state(-1);
   let loading = $state(false);
   let error = $state<string | null>(null);
+  let playing = $state(false);
+  let audioEl = $state<HTMLAudioElement>();
 
   const recent = new RecentArtists();
   let prefetched: Promise<SpinResponse> | null = null;
 
-  async function shuffle(): Promise<void> {
+  const current = $derived(index >= 0 ? (history[index] ?? null) : null);
+  const song = $derived(current?.song ?? null);
+  const canPrev = $derived(index > 0);
+
+  /** Discover a fresh song: drop any forward history, append, move to it. */
+  async function discover(): Promise<void> {
     if (loading) return;
     loading = true;
     error = null;
@@ -19,9 +29,10 @@
       const next = prefetched ?? spin(recent);
       prefetched = null;
       const result = await next;
-      current = result;
+      history = [...history.slice(0, index + 1), result];
+      index = history.length - 1;
       recent.add(result.song.artistId);
-      // Warm the next spin so the following shuffle lands instantly.
+      // Warm the next spin so the following discover lands instantly.
       prefetched = spin(recent);
     } catch (e) {
       error = e instanceof Error ? e.message : 'Something went wrong.';
@@ -30,28 +41,84 @@
     }
   }
 
-  function onKeydown(event: KeyboardEvent): void {
-    const target = event.target as HTMLElement | null;
-    const typing = target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA';
-    if (event.code === 'Space' && !typing) {
-      event.preventDefault();
-      void shuffle();
+  /** Forward in the deck, or discover a fresh song when at the front. */
+  function next(): void {
+    if (index < history.length - 1) index += 1;
+    else void discover();
+  }
+
+  function prev(): void {
+    if (canPrev) index -= 1;
+  }
+
+  function togglePlay(): void {
+    if (!audioEl || !song?.previewUrl) return;
+    if (audioEl.paused) void audioEl.play().catch(() => {});
+    else audioEl.pause();
+  }
+
+  // Load and autoplay each new song's preview. Re-runs when the song (or its
+  // preview) changes; the first load has no user gesture so autoplay may be
+  // blocked, which is fine: it just stays paused until the listener acts.
+  $effect(() => {
+    const url = song?.previewUrl ?? null;
+    song?.recordingId;
+    if (!audioEl) return;
+    if (url) {
+      audioEl.currentTime = 0;
+      void audioEl.play().catch(() => {
+        playing = false;
+      });
+    } else {
+      audioEl.pause();
+    }
+  });
+
+  let touchX = 0;
+  let touchY = 0;
+  function onTouchStart(event: TouchEvent): void {
+    const t = event.changedTouches[0];
+    touchX = t.clientX;
+    touchY = t.clientY;
+  }
+  function onTouchEnd(event: TouchEvent): void {
+    const t = event.changedTouches[0];
+    const dx = t.clientX - touchX;
+    const dy = t.clientY - touchY;
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) {
+      if (dx < 0) next();
+      else prev();
     }
   }
 
-  function meta(song: Song): string {
+  function onKeydown(event: KeyboardEvent): void {
+    const target = event.target as HTMLElement | null;
+    if (target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA') return;
+    if (event.code === 'Space') {
+      event.preventDefault();
+      togglePlay();
+    } else if (event.code === 'ArrowRight') {
+      event.preventDefault();
+      next();
+    } else if (event.code === 'ArrowLeft') {
+      event.preventDefault();
+      prev();
+    }
+  }
+
+  function meta(s: Song): string {
     const parts: string[] = [];
-    if (song.year) parts.push(String(song.year));
-    if (song.genres.length) parts.push(song.genres.slice(0, 2).join(', '));
+    if (s.year) parts.push(String(s.year));
+    if (s.genres.length) parts.push(s.genres.slice(0, 2).join(', '));
     return parts.join('  ·  ');
   }
 
-  function initial(song: Song): string {
-    return song.artist.trim().charAt(0).toUpperCase() || '?';
+  function initial(s: Song): string {
+    return s.artist.trim().charAt(0).toUpperCase() || '?';
   }
 
   onMount(() => {
-    void shuffle();
+    void discover();
   });
 </script>
 
@@ -63,22 +130,77 @@
     <p class="tagline">Shuffle everything.</p>
   </header>
 
+  {#snippet playIcon()}
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor" /></svg>
+  {/snippet}
+  {#snippet pauseIcon()}
+    <svg viewBox="0 0 24 24" aria-hidden="true"
+      ><path d="M6 5h4v14H6zM14 5h4v14h-4z" fill="currentColor" /></svg
+    >
+  {/snippet}
+
   <section class="stage" aria-live="polite">
     {#if current}
       {@const song = current.song}
-      <article class="card" data-testid="result">
-        <div class="cover" aria-hidden="true">
-          {#if song.coverArtUrl}
-            <img src={song.coverArtUrl} alt="" />
-          {:else}
-            <span>{initial(song)}</span>
-          {/if}
-        </div>
+      <article
+        class="card"
+        data-testid="result"
+        ontouchstart={onTouchStart}
+        ontouchend={onTouchEnd}
+      >
+        {#if song.previewUrl}
+          <button
+            class="cover cover-btn"
+            onclick={togglePlay}
+            aria-pressed={playing}
+            aria-label={playing ? 'Pause preview' : 'Play preview'}
+            data-testid="cover-toggle"
+          >
+            {#if song.coverArtUrl}
+              <img src={song.coverArtUrl} alt="" />
+            {:else}
+              <span>{initial(song)}</span>
+            {/if}
+            <span class="play-overlay" class:playing aria-hidden="true">
+              {@render (playing ? pauseIcon : playIcon)()}
+            </span>
+          </button>
+        {:else}
+          <div class="cover" aria-hidden="true">
+            {#if song.coverArtUrl}
+              <img src={song.coverArtUrl} alt="" />
+            {:else}
+              <span>{initial(song)}</span>
+            {/if}
+          </div>
+        {/if}
+
         <h2 class="title" data-testid="title">{song.title}</h2>
         <p class="artist">{song.artist}</p>
         {#if meta(song)}
           <p class="meta">{meta(song)}</p>
         {/if}
+
+        <div class="controls" data-testid="controls">
+          <button
+            class="ctrl"
+            onclick={prev}
+            disabled={!canPrev}
+            aria-label="Previous song"
+            data-testid="prev">‹</button
+          >
+          <button
+            class="ctrl play"
+            onclick={togglePlay}
+            disabled={!song.previewUrl}
+            aria-label={playing ? 'Pause' : 'Play'}
+            data-testid="playpause"
+          >
+            {@render (playing ? pauseIcon : playIcon)()}
+          </button>
+          <button class="ctrl" onclick={next} aria-label="Next song" data-testid="next">›</button>
+        </div>
+
         <ul class="links" data-testid="links">
           {#each current.links as link (link.platform)}
             <li>
@@ -107,9 +229,19 @@
     {/if}
   </section>
 
+  <audio
+    bind:this={audioEl}
+    src={song?.previewUrl ?? ''}
+    onplay={() => (playing = true)}
+    onpause={() => (playing = false)}
+    onended={() => (playing = false)}
+    preload="none"
+    data-testid="player-audio"
+  ></audio>
+
   <button
     class="shuffle"
-    onclick={shuffle}
+    onclick={discover}
     disabled={loading}
     data-testid="shuffle"
     aria-label="Shuffle to a new song"
@@ -117,7 +249,9 @@
     {loading ? 'Finding a song' : 'Shuffle'}
   </button>
 
-  <p class="hint" data-testid="hint">Press <kbd>space</kbd> for another</p>
+  <p class="hint" data-testid="hint">
+    <kbd>space</kbd> play · <kbd>←</kbd> <kbd>→</kbd> browse
+  </p>
 </main>
 
 <style>
@@ -189,6 +323,107 @@
     font-family: var(--font-display);
     font-size: 3rem;
     color: var(--ink-soft);
+  }
+
+  .cover-btn {
+    appearance: none;
+    padding: 0;
+    position: relative;
+    cursor: pointer;
+  }
+
+  .play-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fafafa;
+    background: rgba(20, 20, 20, 0.28);
+    opacity: 0;
+    transition: opacity 0.15s ease;
+  }
+
+  .play-overlay :global(svg) {
+    width: 40px;
+    height: 40px;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45));
+  }
+
+  /* Paused: keep the play triangle visible so it reads as playable. */
+  .play-overlay:not(.playing) {
+    opacity: 1;
+    background: rgba(20, 20, 20, 0.16);
+  }
+
+  .cover-btn:hover .play-overlay,
+  .cover-btn:focus-visible .play-overlay {
+    opacity: 1;
+  }
+
+  .cover-btn:focus-visible {
+    outline: 2px solid var(--ink);
+    outline-offset: 3px;
+  }
+
+  .controls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.85rem;
+    margin-top: 1.4rem;
+  }
+
+  .ctrl {
+    appearance: none;
+    background: transparent;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    width: 2.5rem;
+    height: 2.5rem;
+    font-size: 1.5rem;
+    line-height: 1;
+    color: var(--ink);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition:
+      border-color 0.15s ease,
+      background 0.15s ease,
+      opacity 0.15s ease;
+  }
+
+  .ctrl:hover:not(:disabled) {
+    border-color: var(--ink);
+    background: var(--bg);
+  }
+
+  .ctrl:disabled {
+    opacity: 0.35;
+    cursor: default;
+  }
+
+  .ctrl:focus-visible {
+    outline: 2px solid var(--ink);
+    outline-offset: 2px;
+  }
+
+  .ctrl.play {
+    width: 3rem;
+    height: 3rem;
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fafafa;
+  }
+
+  .ctrl.play :global(svg) {
+    width: 22px;
+    height: 22px;
+  }
+
+  audio {
+    display: none;
   }
 
   .title {

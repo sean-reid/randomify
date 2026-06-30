@@ -28,6 +28,7 @@ const corpus: Pick<CorpusData, 'artists' | 'releaseGroups' | 'recordings' | 'lin
       year: 1997,
       language: 'eng',
       coverArtUrl: null,
+      previewUrl: null,
       genres: ['rock'],
     },
     {
@@ -40,6 +41,7 @@ const corpus: Pick<CorpusData, 'artists' | 'releaseGroups' | 'recordings' | 'lin
       year: 1997,
       language: 'eng',
       coverArtUrl: null,
+      previewUrl: null,
       genres: ['rock', 'alternative'],
     },
     {
@@ -52,6 +54,7 @@ const corpus: Pick<CorpusData, 'artists' | 'releaseGroups' | 'recordings' | 'lin
       year: 2003,
       language: 'spa',
       coverArtUrl: null,
+      previewUrl: null,
       genres: ['pop'],
     },
   ],

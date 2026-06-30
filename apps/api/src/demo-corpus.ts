@@ -23,6 +23,8 @@ interface DemoSong {
   country: string;
   language: string;
   durationMs: number;
+  previewUrl?: string;
+  coverArtUrl?: string;
 }
 
 /**
@@ -302,7 +304,8 @@ export class DemoCorpusProvider implements CorpusProvider {
       year: s.year,
       isrc: null,
       durationMs: s.durationMs,
-      coverArtUrl: null,
+      coverArtUrl: s.coverArtUrl ?? null,
+      previewUrl: s.previewUrl ?? null,
       genres: s.genres,
     });
   }

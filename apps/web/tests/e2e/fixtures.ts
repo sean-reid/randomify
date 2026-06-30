@@ -14,6 +14,10 @@ export const SAMPLE_SPIN: SpinResponse = {
     isrc: null,
     durationMs: 383000,
     coverArtUrl: null,
+    // A tiny silent WAV so the player actually loads and plays in the headless
+    // browser without a network dependency.
+    previewUrl:
+      'data:audio/wav;base64,UklGRmQBAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YUABAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgA==',
     genres: ['rock', 'alternative'],
   },
   links: PLATFORMS.map((p) => searchLink(p.id, 'Radiohead', 'Paranoid Android')),

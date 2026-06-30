@@ -46,6 +46,37 @@ describe('deezerIsrcStrategy', () => {
     });
   });
 
+  it('captures the preview MP3 and cover art when present', async () => {
+    const candidate = await deezerIsrcStrategy(
+      mockFetch({
+        ...deezerTrack,
+        preview: 'https://cdn-preview.dzcdn.net/stream/abc.mp3',
+        album: {
+          title: 'OK Computer',
+          cover_big: 'https://e-cdn.dz/big.jpg',
+          cover_xl: 'https://e-cdn.dz/xl.jpg',
+        },
+      }),
+    ).run(fingerprint);
+    expect(candidate).toMatchObject({
+      previewUrl: 'https://cdn-preview.dzcdn.net/stream/abc.mp3',
+      coverArtUrl: 'https://e-cdn.dz/xl.jpg',
+    });
+  });
+
+  it('leaves preview and cover null when Deezer omits them', async () => {
+    const candidate = await deezerIsrcStrategy(mockFetch(deezerTrack)).run(fingerprint);
+    expect(candidate?.previewUrl).toBeNull();
+    expect(candidate?.coverArtUrl).toBeNull();
+  });
+
+  it('parses the release year from the release date', async () => {
+    const candidate = await deezerIsrcStrategy(
+      mockFetch({ ...deezerTrack, release_date: '1997-05-21' }),
+    ).run(fingerprint);
+    expect(candidate?.year).toBe(1997);
+  });
+
   it('returns null when Deezer reports an error', async () => {
     const candidate = await deezerIsrcStrategy(
       mockFetch({ error: { type: 'DataException', message: 'no data' } }),
