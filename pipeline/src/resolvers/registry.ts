@@ -1,4 +1,6 @@
+import type { PlatformId } from '@randomify/shared';
 import type { PlatformResolver, ResolveApproach } from './types.js';
+import { buildDeezerResolver } from './platforms/deezer.js';
 
 /**
  * Resolution approach per platform. The four with official ISRC lookup anchor
@@ -20,8 +22,13 @@ const APPROACHES: Record<string, ResolveApproach> = {
   bandcamp: 'metadata-internal',
 };
 
+/** Platforms with a live resolver implementation; the rest fall back to search. */
+const BUILDERS: Partial<Record<PlatformId, () => PlatformResolver>> = {
+  deezer: () => buildDeezerResolver(),
+};
+
 export const RESOLVERS: readonly PlatformResolver[] = (
-  Object.entries(APPROACHES) as [PlatformResolver['platform'], ResolveApproach][]
-).map(([platform, approach]) => ({ platform, approach, strategies: [] }));
+  Object.entries(APPROACHES) as [PlatformId, ResolveApproach][]
+).map(([platform, approach]) => BUILDERS[platform]?.() ?? { platform, approach, strategies: [] });
 
 export const RESOLVER_BY_PLATFORM = new Map(RESOLVERS.map((r) => [r.platform, r]));
