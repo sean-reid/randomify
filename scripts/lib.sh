@@ -39,6 +39,24 @@ hc() {
   curl -fsS -m 10 --retry 3 "${HEALTHCHECK_URL}${1:-}" -o /dev/null || true
 }
 
+# record_run <name> <env> <status> <exit> <started_epoch> - append a durable
+# run record (history) and overwrite a per-job status file (last run), so cron
+# health is queryable locally even when the off-Mac healthcheck is unset or the
+# Mac was off. See scripts/cron-status.sh.
+record_run() {
+  local name="$1" env="$2" status="$3" code="$4" started="$5"
+  local dir="$RANDOMIFY_REPO/data/musicbrainz/logs"
+  local ts ended dur
+  ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  ended="$(date +%s)"
+  dur=$((ended - started))
+  mkdir -p "$dir"
+  printf '{"ts":"%s","job":"%s","env":"%s","status":"%s","exit":%s,"duration_s":%s}\n' \
+    "$ts" "$name" "$env" "$status" "$code" "$dur" >>"$dir/runs.jsonl"
+  printf '%s %s %s exit=%s %ss\n' "$ts" "$status" "$name-$env" "$code" "$dur" \
+    >"$dir/$name-$env.status"
+}
+
 # notify <title> <message> - instant phone push via ntfy + a local macOS banner.
 notify() {
   local title="$1" message="$2"
@@ -97,6 +115,8 @@ run_job() {
   # HEALTHCHECK_URL (fine when an env runs a single job, e.g. dev load-small).
   local jobvar="HEALTHCHECK_URL_$(echo "$name" | tr '[:lower:]' '[:upper:]')"
   HEALTHCHECK_URL="${!jobvar:-${HEALTHCHECK_URL:-}}"
+  local started
+  started="$(date +%s)"
   hc /start
   # Run the job body in a subshell with its own `set -e` so an intermediate
   # failure (download, build, extract) aborts the job. Calling "$fn" directly as
@@ -105,9 +125,11 @@ run_job() {
     set -e
     "$fn"
   ); then
+    record_run "$name" "$env" ok 0 "$started"
     hc
   else
     local code=$?
+    record_run "$name" "$env" fail "$code" "$started"
     hc /fail
     notify "randomify: $name failed ($env)" "exit $code - check the cron log in data/musicbrainz/logs"
     exit "$code"

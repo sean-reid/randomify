@@ -33,19 +33,23 @@ cp scripts/env.example data/musicbrainz/production.env # CANDIDATE_LIMIT unset
 
 ## Install (launchd)
 
+One script installs the right jobs for an environment (copies the plists into
+`~/Library/LaunchAgents` and bootstraps them):
+
 ```sh
-mkdir -p data/musicbrainz/logs
-# dev small load:
-cp scripts/launchd/com.randomify.dev-load.plist ~/Library/LaunchAgents/
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.randomify.dev-load.plist
-# run it once now to verify:
+scripts/install-cron.sh dev          # weekly small load
+scripts/install-cron.sh staging      # weekly small load
+scripts/install-cron.sh production   # refresh (weekly) + resolve (hourly) + weights (daily)
+
+# run a job once to verify (the installer prints the exact label):
 launchctl kickstart -k gui/$(id -u)/com.randomify.dev-load
 ```
 
-The prod plists (`prod-refresh`, `prod-resolve`, `prod-weights`) install the same
-way - but only after the prod launch gate (good initial population) is satisfied.
+`dev` and `staging` each install a single weekly `*-load` job; `production`
+installs the three separate-cadence jobs. Install `production` (and `staging`)
+**only after** the prod launch gate (a good initial corpus) is satisfied.
 
-To remove a job: `launchctl bootout gui/$(id -u)/com.randomify.dev-load`.
+Remove an environment's jobs with `scripts/uninstall-cron.sh <env>`.
 
 ### PATH caveat
 
@@ -75,3 +79,14 @@ Set `HEALTHCHECK_URL` and `NTFY_TOPIC` per env (see `env.example`):
   instant phone alert, plus a local macOS notification.
 
 Subscribe to the ntfy topic in the ntfy phone app. Keep the topic name secret.
+
+Every run also writes a **local record** under `data/musicbrainz/logs/`: a
+per-job `<job>-<env>.status` (last run) and an appended `runs.jsonl` (history).
+These work even with no healthcheck configured. Check health at a glance with:
+
+```sh
+scripts/cron-status.sh
+```
+
+It prints the last run of each job (flagging non-`ok` exits), which launchd jobs
+are loaded, and recent run history.
