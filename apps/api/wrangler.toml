@@ -3,10 +3,29 @@ main = "src/index.ts"
 compatibility_date = "2025-06-01"
 compatibility_flags = ["nodejs_compat"]
 
+# The default environment is the deployed dev API, used by PR previews and the
+# stable randomify-dev domain. Local `wrangler dev` ignores routes.
+routes = [{ pattern = "api.randomify-dev.dwainosaur.com", custom_domain = true }]
+
 # The corpus lives in Neon Postgres, reached from the Worker through Hyperdrive.
-# Provisioned in the corpus PR; until then the Worker serves a built-in demo
-# corpus so the endpoint is fully runnable.
+# Each environment points at its own Neon branch via its own Hyperdrive config.
+# Until those are provisioned the Worker serves a built-in demo corpus, so every
+# environment is runnable. Uncomment and fill the id once provisioned.
 #
 # [[hyperdrive]]
 # binding = "HYPERDRIVE"
-# id = "<hyperdrive-config-id>"
+# id = "<dev-hyperdrive-config-id>"
+
+[env.staging]
+name = "randomify-api-staging"
+routes = [{ pattern = "api.randomify-staging.dwainosaur.com", custom_domain = true }]
+# [[env.staging.hyperdrive]]
+# binding = "HYPERDRIVE"
+# id = "<staging-hyperdrive-config-id>"
+
+[env.production]
+name = "randomify-api-production"
+routes = [{ pattern = "api.randomify.dwainosaur.com", custom_domain = true }]
+# [[env.production.hyperdrive]]
+# binding = "HYPERDRIVE"
+# id = "<production-hyperdrive-config-id>"

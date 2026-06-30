@@ -1,0 +1,78 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Deploys are off until the infra exists. Set the repo variable
+# DEPLOY_ENABLED=true once Cloudflare, the Pages projects, the custom domains,
+# and the CLOUDFLARE_* secrets are in place. Until then these jobs skip cleanly
+# rather than failing.
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  staging:
+    name: Deploy to staging
+    if: ${{ vars.DEPLOY_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    environment: staging
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @randomify/shared build
+
+      - name: Deploy API Worker (staging)
+        run: pnpm --filter @randomify/api exec wrangler deploy --env staging
+
+      - name: Build web
+        run: pnpm --filter @randomify/web build
+        env:
+          PUBLIC_RANDOMIFY_API: https://api.randomify-staging.dwainosaur.com
+      - name: Deploy web to Pages (staging)
+        run: >-
+          pnpm --filter @randomify/web exec wrangler pages deploy
+          .svelte-kit/cloudflare --project-name=randomify-web-staging --branch=production
+
+  production:
+    name: Deploy to production
+    if: ${{ vars.DEPLOY_ENABLED == 'true' }}
+    needs: staging
+    runs-on: ubuntu-latest
+    # The production GitHub Environment carries the required-reviewer gate, so
+    # this job pauses for manual approval before it runs.
+    environment: production
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @randomify/shared build
+
+      - name: Deploy API Worker (production)
+        run: pnpm --filter @randomify/api exec wrangler deploy --env production
+
+      - name: Build web
+        run: pnpm --filter @randomify/web build
+        env:
+          PUBLIC_RANDOMIFY_API: https://api.randomify.dwainosaur.com
+      - name: Deploy web to Pages (production)
+        run: >-
+          pnpm --filter @randomify/web exec wrangler pages deploy
+          .svelte-kit/cloudflare --project-name=randomify-web --branch=production
