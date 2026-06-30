@@ -1,16 +1,17 @@
 import { searchQuery } from '@randomify/shared';
 import type { Candidate, Fingerprint, PlatformResolver, ResolveStrategy } from '../types.js';
+import { politeFetch, rateLimitedFetch, type FetchLike } from '../http.js';
 
-/** Minimal structural fetch so the strategies are trivial to mock and do not
- * depend on a DOM/Node lib being present in the type environment. */
-export interface JsonResponse {
-  ok: boolean;
-  status: number;
-  json(): Promise<unknown>;
-}
-export type FetchLike = (url: string) => Promise<JsonResponse>;
+export type { FetchLike, JsonResponse } from '../http.js';
 
 const API = 'https://api.deezer.com';
+
+/** Default Deezer fetch: polite User-Agent, throttled well under Deezer's
+ * ~50-requests-per-5s limit (~4.5/s) and backing off on 429. Shared across the
+ * resolver's strategies so the whole platform stays under one rate budget. */
+function defaultDeezerFetch(): FetchLike {
+  return rateLimitedFetch(politeFetch, { minIntervalMs: 220 });
+}
 
 interface DeezerTrack {
   id?: number;
@@ -77,7 +78,7 @@ export function deezerSearchStrategy(fetchFn: FetchLike = fetch): ResolveStrateg
   };
 }
 
-export function buildDeezerResolver(fetchFn: FetchLike = fetch): PlatformResolver {
+export function buildDeezerResolver(fetchFn: FetchLike = defaultDeezerFetch()): PlatformResolver {
   return {
     platform: 'deezer',
     approach: 'isrc-api',
