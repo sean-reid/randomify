@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- prod daily weight rebuild from the current streamable corpus. -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.randomify.prod-weights</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/seanreid/randomify/scripts/rebuild-weights.sh</string>
+    <string>production</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key><integer>5</integer>
+    <key>Minute</key><integer>0</integer>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>/Users/seanreid/randomify/data/musicbrainz/logs/prod-weights.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/seanreid/randomify/data/musicbrainz/logs/prod-weights.log</string>
+</dict>
+</plist>

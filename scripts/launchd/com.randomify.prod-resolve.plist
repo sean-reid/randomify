@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- prod hourly resolve: incrementally grow the corpus from the backlog. -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.randomify.prod-resolve</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/seanreid/randomify/scripts/resolve.sh</string>
+    <string>production</string>
+  </array>
+  <key>StartInterval</key>
+  <integer>3600</integer>
+  <key>StandardOutPath</key>
+  <string>/Users/seanreid/randomify/data/musicbrainz/logs/prod-resolve.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/seanreid/randomify/data/musicbrainz/logs/prod-resolve.log</string>
+</dict>
+</plist>
