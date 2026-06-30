@@ -11,5 +11,6 @@ export * from './run/resolve-batch.js';
 export * from './run/postgres-cache.js';
 export * from './run/backlog.js';
 export * from './run/resolve-backlog.js';
+export * from './run/rebuild-weights.js';
 export * from './run/build-corpus.js';
 export * from './run/pipeline.js';
