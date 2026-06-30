@@ -14,9 +14,10 @@ function decadeOf(year: number | null): string | null {
 }
 
 /**
- * Assemble the serving corpus from resolved recordings. Only recordings with at
- * least one exact streaming link are kept (streamable-only); their full link
- * row (exact plus search fallbacks) is preserved so every platform shows.
+ * Assemble the serving corpus from resolved recordings. A recording is kept only
+ * if it was found on Deezer (an exact Deezer link) - that is the catalog we can
+ * play a preview from and our anchor for the corpus. The full link row (exact
+ * plus search fallbacks) is preserved so every platform still shows.
  */
 export function buildCorpusData(
   recordings: readonly NormalizedRecording[],
@@ -24,7 +25,7 @@ export function buildCorpusData(
 ): CorpusData {
   const streamableRecordings = recordings.filter((recording) => {
     const resolutions = resolutionsByRecording.get(recording.recordingId) ?? [];
-    return resolutions.some((r) => r.kind === 'exact');
+    return resolutions.some((r) => r.kind === 'exact' && r.platform === 'deezer');
   });
 
   const artists = new Map<string, CorpusArtist>();

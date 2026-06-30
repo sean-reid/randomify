@@ -52,13 +52,25 @@ function toPgArray(items: string[]): string {
   return `{${items.map((s) => `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`).join(',')}}`;
 }
 
-/** Create the corpus tables if they do not exist. Runs each DDL statement
- * separately so it works on clients that reject multi-statement queries. */
+/**
+ * Add columns introduced after a table's first creation, so an existing
+ * database is brought up to date in place (CREATE TABLE IF NOT EXISTS never
+ * alters an existing table). Keep these idempotent.
+ */
+const SCHEMA_MIGRATIONS = [
+  'ALTER TABLE recording ADD COLUMN IF NOT EXISTS cover_art_url TEXT',
+  'ALTER TABLE recording ADD COLUMN IF NOT EXISTS preview_url TEXT',
+];
+
+/** Create the corpus tables if they do not exist, then apply column migrations.
+ * Runs each statement separately so it works on clients that reject
+ * multi-statement queries. */
 export async function applySchema(client: SqlClient): Promise<void> {
   const statements = SCHEMA_SQL.split(';')
     .map((s) => s.trim())
     .filter(Boolean);
   for (const statement of statements) await client.query(statement);
+  for (const migration of SCHEMA_MIGRATIONS) await client.query(migration);
 }
 
 const CHUNK = 500;

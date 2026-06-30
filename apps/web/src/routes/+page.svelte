@@ -20,6 +20,52 @@
   const song = $derived(current?.song ?? null);
   const canPrev = $derived(index > 0);
 
+  let fadeTimer: ReturnType<typeof setInterval> | undefined;
+
+  /** Ramp the audio volume toward `target`; pause once it reaches silence. */
+  function fadeTo(target: number, ms = 300): void {
+    const el = audioEl;
+    if (!el) return;
+    clearInterval(fadeTimer);
+    const start = el.volume;
+    const steps = 15;
+    let i = 0;
+    fadeTimer = setInterval(() => {
+      i += 1;
+      el.volume = Math.max(0, Math.min(1, start + (target - start) * (i / steps)));
+      if (i >= steps) {
+        clearInterval(fadeTimer);
+        if (target === 0) el.pause();
+      }
+    }, ms / steps);
+  }
+
+  /** Play from silence and fade in; restore volume if autoplay is blocked. */
+  function playFadeIn(): void {
+    const el = audioEl;
+    if (!el) return;
+    el.volume = 0;
+    el.play().then(
+      () => fadeTo(1),
+      () => {
+        el.volume = 1;
+        playing = false;
+      },
+    );
+  }
+
+  /** Preload and decode a cover so it appears in sync with the title. */
+  async function loadCover(url: string | null): Promise<void> {
+    if (!url || typeof Image === 'undefined') return;
+    const img = new Image();
+    img.src = url;
+    try {
+      await Promise.race([img.decode(), new Promise((resolve) => setTimeout(resolve, 1200))]);
+    } catch {
+      // Show the card regardless if the cover fails to decode.
+    }
+  }
+
   /** Discover a fresh song: drop any forward history, append, move to it. */
   async function discover(): Promise<void> {
     if (loading) return;
@@ -29,11 +75,15 @@
       const next = prefetched ?? spin(recent);
       prefetched = null;
       const result = await next;
+      // Wait for the cover so art and title appear together, not staggered.
+      await loadCover(result.song.coverArtUrl);
       history = [...history.slice(0, index + 1), result];
       index = history.length - 1;
       recent.add(result.song.artistId);
-      // Warm the next spin so the following discover lands instantly.
-      prefetched = spin(recent);
+      // Warm the next spin and preload its cover so the next discover is instant.
+      const warm = spin(recent);
+      prefetched = warm;
+      void warm.then((r) => loadCover(r.song.coverArtUrl));
     } catch (e) {
       error = e instanceof Error ? e.message : 'Something went wrong.';
     } finally {
@@ -53,25 +103,19 @@
 
   function togglePlay(): void {
     if (!audioEl || !song?.previewUrl) return;
-    if (audioEl.paused) void audioEl.play().catch(() => {});
-    else audioEl.pause();
+    if (audioEl.paused) playFadeIn();
+    else fadeTo(0, 200);
   }
 
-  // Load and autoplay each new song's preview. Re-runs when the song (or its
-  // preview) changes; the first load has no user gesture so autoplay may be
-  // blocked, which is fine: it just stays paused until the listener acts.
+  // Autoplay each new song's preview with a short fade-in. Re-runs when the song
+  // changes. The first page load has no user gesture, so autoplay may be blocked
+  // by the browser; that is fine: it stays paused with the play affordance shown.
   $effect(() => {
     const url = song?.previewUrl ?? null;
     song?.recordingId;
     if (!audioEl) return;
-    if (url) {
-      audioEl.currentTime = 0;
-      void audioEl.play().catch(() => {
-        playing = false;
-      });
-    } else {
-      audioEl.pause();
-    }
+    if (url) playFadeIn();
+    else audioEl.pause();
   });
 
   let touchX = 0;
@@ -235,7 +279,7 @@
     onplay={() => (playing = true)}
     onpause={() => (playing = false)}
     onended={() => (playing = false)}
-    preload="none"
+    preload="metadata"
     data-testid="player-audio"
   ></audio>
 
