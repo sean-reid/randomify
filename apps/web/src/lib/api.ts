@@ -1,21 +1,27 @@
-import { env } from '$env/dynamic/public';
 import type { SpinResponse } from '@randomify/shared';
 import type { RecentArtists } from './recent.js';
 
+/** The environment's API base, inlined at build time (see vite.config.ts). */
+declare const __RANDOMIFY_API__: string;
+
+/** Dev API for preview deployments (*.pages.dev) and other non-environment hosts. */
+const DEV_API = 'https://api.randomify-dev.dwainosaur.com';
+
 /**
- * Resolve the API base. Each web host has a matching API host (api.<host>), so
- * production, staging, and dev all wire up with no per-environment config.
- * PUBLIC_RANDOMIFY_API overrides it when set (handy for local dev).
+ * Resolve the API base. Production, staging, and dev builds bake in their own
+ * `PUBLIC_RANDOMIFY_API` at build time, so there is no runtime guessing. Local
+ * dev hits the local Worker; preview builds fall back to the dev API.
  */
 export function resolveApiBase(): string {
-  const override = env.PUBLIC_RANDOMIFY_API;
-  if (override) return override;
+  const configured = typeof __RANDOMIFY_API__ === 'string' ? __RANDOMIFY_API__ : '';
+  if (configured) return configured;
   if (typeof location !== 'undefined') {
     const { protocol, hostname } = location;
     if (hostname === 'localhost' || hostname === '127.0.0.1') return 'http://localhost:8787';
-    return `${protocol}//api.${hostname}`;
+    if (hostname.endsWith('.dwainosaur.com')) return `${protocol}//api.${hostname}`;
+    return DEV_API;
   }
-  return 'http://localhost:8787';
+  return DEV_API;
 }
 
 /** Fetch one random song, excluding recently seen artists. */
