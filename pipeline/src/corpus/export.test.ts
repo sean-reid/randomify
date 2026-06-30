@@ -1,6 +1,6 @@
 import { PGlite } from '@electric-sql/pglite';
 import { describe, expect, it } from 'vitest';
-import { exportCorpus, type CorpusData } from './export.js';
+import { applySchema, exportCorpus, type CorpusData } from './export.js';
 import { buildWeights, type StreamableRecording } from './weights.js';
 
 const RECORDINGS: StreamableRecording[] = [
@@ -88,6 +88,21 @@ describe('exportCorpus against PGlite', () => {
       `SELECT genres FROM recording WHERE id = 'r2'`,
     );
     expect([...rec.rows[0]!.genres].sort()).toEqual(['bossa nova', 'jazz']);
+  });
+
+  it('adds columns missing from a pre-existing recording table', async () => {
+    const db = new PGlite();
+    // A recording table created before preview_url / cover_art_url existed.
+    await db.query(
+      `CREATE TABLE recording (id TEXT PRIMARY KEY, artist_id TEXT NOT NULL,
+         release_group_id TEXT NOT NULL, title TEXT NOT NULL)`,
+    );
+    await applySchema(db);
+    const res = await db.query<{ column_name: string }>(
+      `SELECT column_name FROM information_schema.columns
+       WHERE table_name = 'recording' AND column_name IN ('preview_url', 'cover_art_url')`,
+    );
+    expect(res.rows.map((r) => r.column_name).sort()).toEqual(['cover_art_url', 'preview_url']);
   });
 
   it('keeps facet_value cum_weight monotonic in the database', async () => {

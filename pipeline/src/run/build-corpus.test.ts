@@ -82,6 +82,14 @@ describe('buildCorpusData', () => {
     expect(corpus.recordings.find((r) => r.id === 'r2')?.year).toBe(1995); // MB year preserved
   });
 
+  it('drops a recording found only on a non-Deezer platform', () => {
+    const corpus = buildCorpusData(
+      [rec('r1', 'a1')],
+      new Map([['r1', [exact('tidal'), fallback('deezer')]]]),
+    );
+    expect(corpus.recordings).toHaveLength(0);
+  });
+
   it('produces an empty corpus when nothing is streamable', () => {
     const corpus = buildCorpusData([rec('r1', 'a1')], new Map([['r1', [fallback('deezer')]]]));
     expect(corpus.recordings).toHaveLength(0);
