@@ -13,6 +13,14 @@ RANDOMIFY_REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # (`which node`, `which pnpm`) - see scripts/README.md.
 export PATH="/opt/homebrew/bin:/usr/local/bin:$HOME/.local/share/pnpm:$HOME/Library/pnpm:$PATH"
 
+# nvm-managed node/pnpm: launchd has no nvm, so prepend the highest installed
+# node version's bin (survives node upgrades). Without this the cron dies with
+# "pnpm: command not found" (exit 127) under launchd's minimal PATH.
+if [ -d "$HOME/.nvm/versions/node" ]; then
+  _nvm_bin="$(/bin/ls -d "$HOME"/.nvm/versions/node/*/bin 2>/dev/null | sort -V | tail -1)"
+  [ -n "$_nvm_bin" ] && export PATH="$_nvm_bin:$PATH"
+fi
+
 # load_env <env> - source data/musicbrainz/<env>.env (gitignored). Expected vars:
 #   DATABASE_URL    Neon connection string for this environment's corpus
 #   CANDIDATE_LIMIT cap on backlog candidates (1000 for dev/staging; unset = full, prod)
