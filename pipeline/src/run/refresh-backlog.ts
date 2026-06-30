@@ -30,7 +30,9 @@ try {
   };
   const recordings = await extractMusicBrainz(dumpDir, candidateLimit);
   await populateBacklog(client, recordings);
-  console.log(JSON.stringify({ candidates: recordings.length, cap: candidateLimit ?? null }, null, 2));
+  console.log(
+    JSON.stringify({ candidates: recordings.length, cap: candidateLimit ?? null }, null, 2),
+  );
 } finally {
   await pg.end();
 }

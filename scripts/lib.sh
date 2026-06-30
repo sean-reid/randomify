@@ -2,7 +2,7 @@
 # Shared helpers for the randomify Mac cron jobs. Sourced by each per-job script.
 #
 # Provides: repo-root resolution, a launchd-safe PATH, per-env config loading,
-# and run_job() — a wrapper that adds a flock guard, healthchecks.io heartbeat
+# and run_job() - a wrapper that adds a flock guard, healthchecks.io heartbeat
 # pings, and a phone (ntfy) + local failure alert around the job body.
 
 # Repo root: scripts/ lives directly under it.
@@ -10,10 +10,10 @@ RANDOMIFY_REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # launchd does NOT inherit your interactive shell PATH, so node/pnpm are not found
 # unless we add them here. Adjust to wherever your node + pnpm actually live
-# (`which node`, `which pnpm`) — see scripts/README.md.
+# (`which node`, `which pnpm`) - see scripts/README.md.
 export PATH="/opt/homebrew/bin:/usr/local/bin:$HOME/.local/share/pnpm:$HOME/Library/pnpm:$PATH"
 
-# load_env <env> — source data/musicbrainz/<env>.env (gitignored). Expected vars:
+# load_env <env> - source data/musicbrainz/<env>.env (gitignored). Expected vars:
 #   DATABASE_URL    Neon connection string for this environment's corpus
 #   CANDIDATE_LIMIT cap on backlog candidates (1000 for dev/staging; unset = full, prod)
 #   RESOLVE_LIMIT   recordings to resolve per run (default 1000)
@@ -32,14 +32,14 @@ load_env() {
   set +a
 }
 
-# hc <suffix> — ping the healthchecks.io dead-man's-switch. "" = success,
+# hc <suffix> - ping the healthchecks.io dead-man's-switch. "" = success,
 # "/start" = job started, "/fail" = job failed. No-op if HEALTHCHECK_URL unset.
 hc() {
   [ -n "${HEALTHCHECK_URL:-}" ] || return 0
   curl -fsS -m 10 --retry 3 "${HEALTHCHECK_URL}${1:-}" -o /dev/null || true
 }
 
-# notify <title> <message> — instant phone push via ntfy + a local macOS banner.
+# notify <title> <message> - instant phone push via ntfy + a local macOS banner.
 notify() {
   local title="$1" message="$2"
   if [ -n "${NTFY_TOPIC:-}" ]; then
@@ -49,7 +49,7 @@ notify() {
   osascript -e "display notification \"$message\" with title \"$title\"" >/dev/null 2>&1 || true
 }
 
-# run_job <env> <name> <fn> — run job function <fn> under a per-job flock (so jobs
+# run_job <env> <name> <fn> - run job function <fn> under a per-job flock (so jobs
 # of different cadence never block each other), bracketed by heartbeat pings, with
 # a phone + local alert on failure. The job function may set its own EXIT trap
 # (e.g. refresh's scratch cleanup); it still fires on the failure exit below.
@@ -72,7 +72,7 @@ run_job() {
   else
     local code=$?
     hc /fail
-    notify "randomify: $name failed ($env)" "exit $code — check the cron log in data/musicbrainz/logs"
+    notify "randomify: $name failed ($env)" "exit $code - check the cron log in data/musicbrainz/logs"
     exit "$code"
   fi
 }
