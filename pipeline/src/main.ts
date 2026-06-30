@@ -12,7 +12,9 @@ function main(): void {
 
   console.log('\nResolvers:');
   for (const resolver of RESOLVERS) {
-    const strategies = resolver.strategies.length || 'search-fallback only (not yet implemented)';
+    const strategies = resolver.strategies.length
+      ? resolver.strategies.map((s) => s.name).join(', ')
+      : 'search-fallback only (not yet implemented)';
     console.log(`  ${resolver.platform} [${resolver.approach}] — ${strategies}`);
   }
 }
