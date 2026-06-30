@@ -87,9 +87,21 @@ test('space toggles play/pause without shuffling', async ({ page }) => {
   expect(spins).toBe(0);
 });
 
-test('a song without a preview shows no play affordance, links still work', async ({ page }) => {
+test('skips a song with no preview and shows the next playable one', async ({ page }) => {
+  // The app is player-first, so a song with no preview is skipped, never shown.
+  let n = 0;
   await page.route('**/spin*', async (route) => {
-    const body = { ...SAMPLE_SPIN, song: { ...SAMPLE_SPIN.song, previewUrl: null } };
+    n += 1;
+    const noPreview = n === 1;
+    const body = {
+      ...SAMPLE_SPIN,
+      song: {
+        ...SAMPLE_SPIN.song,
+        recordingId: noPreview ? 'no-prev-1' : 'good-1',
+        title: noPreview ? 'No Preview Song' : 'Good Song',
+        previewUrl: noPreview ? null : SAMPLE_SPIN.song.previewUrl,
+      },
+    };
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -98,10 +110,8 @@ test('a song without a preview shows no play affordance, links still work', asyn
   });
 
   await page.goto('/');
-  await expect(page.getByTestId('title')).toBeVisible();
-  await expect(page.getByTestId('playpause')).toBeDisabled();
-  await expect(page.getByTestId('cover-toggle')).toHaveCount(0);
-  await expect(page.getByTestId('links').getByRole('link')).toHaveCount(SAMPLE_SPIN.links.length);
+  await expect(page.getByTestId('title')).toHaveText('Good Song');
+  await expect(page.getByTestId('playpause')).toBeEnabled();
 });
 
 test('skips a song whose preview is dead and shows the next playable one', async ({ page }) => {

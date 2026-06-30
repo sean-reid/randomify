@@ -13,11 +13,12 @@ source "$DIR/lib.sh"
 load_env "$ENV"
 
 SCRATCH="$RANDOMIFY_REPO/data/musicbrainz/scratch-$ENV"
-# Entity tables from the core dump.
-TABLES=(recording isrc artist artist_credit_name track medium release release_group area language)
-# Year (release_group_meta) and genres (genre/tag tables) live in the derived
-# dump, extracted into the same mbdump/ dir; the extractor treats them as optional.
-DERIVED_TABLES=(release_group_meta genre tag release_group_tag)
+# Entity tables from the core dump. genre is a core entity (NOT in the derived
+# dump), so it must be extracted here alongside the other entities.
+TABLES=(recording isrc artist artist_credit_name track medium release release_group area language genre)
+# Year (release_group_meta) and tag votes (tag/release_group_tag) live in the
+# derived dump, extracted into the same mbdump/ dir; both treated as optional.
+DERIVED_TABLES=(release_group_meta tag release_group_tag)
 
 # Remove the (large) dump scratch on exit; run_job calls this alongside the lock
 # release, so a killed run never leaves the ~20GB dump behind.

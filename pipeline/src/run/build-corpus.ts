@@ -31,7 +31,10 @@ export function buildCorpusData(
 ): CorpusData {
   const streamableRecordings = recordings.filter((recording) => {
     const resolutions = resolutionsByRecording.get(recording.recordingId) ?? [];
-    return resolutions.some((r) => r.kind === 'exact' && r.platform === 'deezer');
+    // Require a Deezer match that actually has a preview: the app is
+    // player-first and Deezer-anchored, so a song we cannot play in-app does
+    // not belong in the deck.
+    return resolutions.some((r) => r.kind === 'exact' && r.platform === 'deezer' && r.previewUrl);
   });
 
   const artists = new Map<string, CorpusArtist>();
