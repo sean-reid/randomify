@@ -66,26 +66,28 @@ describe('handleSpin', () => {
     // A corpus that only knows decades (e.g. before the genre dump is loaded).
     const decadeOnly: CorpusProvider = {
       ping: () => Promise.resolve(),
-      pickFacetValue: (facet, _r) => Promise.resolve(facet === 'decade' ? '1990s' : null),
-      pickArtist: () => Promise.resolve('a1'),
-      pickReleaseGroup: () => Promise.resolve('rg1'),
-      pickRecording: () => Promise.resolve('r1'),
-      loadSong: (id) =>
-        Promise.resolve({
-          recordingId: id,
-          title: 'Song',
-          artist: 'Artist',
-          artistId: 'a1',
-          releaseTitle: null,
-          releaseGroupId: 'rg1',
-          year: 1995,
-          isrc: null,
-          durationMs: null,
-          coverArtUrl: null,
-          previewUrl: null,
-          genres: [],
-        }),
-      links: () => Promise.resolve([]),
+      spin: (input) =>
+        Promise.resolve(
+          input.facet === 'decade'
+            ? {
+                song: {
+                  recordingId: 'r1',
+                  title: 'Song',
+                  artist: 'Artist',
+                  artistId: 'a1',
+                  releaseTitle: null,
+                  releaseGroupId: 'rg1',
+                  year: 1995,
+                  isrc: null,
+                  durationMs: null,
+                  coverArtUrl: null,
+                  previewUrl: null,
+                  genres: [],
+                },
+                links: [],
+              }
+            : null,
+        ),
     };
     for (let i = 0; i < 50; i++) {
       const result = await handleSpin(decadeOnly, { rng: mulberry32(i) });

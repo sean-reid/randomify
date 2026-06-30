@@ -6,6 +6,7 @@ import {
   type StreamableRecording,
 } from '@randomify/pipeline';
 import { beforeAll, describe, expect, it } from 'vitest';
+import type { SpinInput } from './corpus.js';
 import { PostgresCorpusProvider, type SqlClient } from './postgres-corpus.js';
 import { handleSpin } from './spin.js';
 
@@ -86,8 +87,8 @@ const SEEDS: Seed[] = [
 
 const decade = (year: number): string => `${Math.floor(year / 10) * 10}s`;
 
-function corpusData(): CorpusData {
-  const streamable: StreamableRecording[] = SEEDS.map((s) => ({
+function corpusData(seeds: Seed[] = SEEDS): CorpusData {
+  const streamable: StreamableRecording[] = seeds.map((s) => ({
     recordingId: s.id,
     artistId: s.artistId,
     releaseGroupId: s.releaseGroupId,
@@ -99,18 +100,18 @@ function corpusData(): CorpusData {
   return {
     artists: [
       ...new Map(
-        SEEDS.map((s) => [s.artistId, { id: s.artistId, name: s.artist, country: s.country }]),
+        seeds.map((s) => [s.artistId, { id: s.artistId, name: s.artist, country: s.country }]),
       ).values(),
     ],
     releaseGroups: [
       ...new Map(
-        SEEDS.map((s) => [
+        seeds.map((s) => [
           s.releaseGroupId,
           { id: s.releaseGroupId, artistId: s.artistId, title: s.releaseTitle, year: s.year },
         ]),
       ).values(),
     ],
-    recordings: SEEDS.map((s) => ({
+    recordings: seeds.map((s) => ({
       id: s.id,
       artistId: s.artistId,
       releaseGroupId: s.releaseGroupId,
@@ -123,7 +124,7 @@ function corpusData(): CorpusData {
       previewUrl: null,
       genres: s.genres,
     })),
-    links: SEEDS.map((s) => ({
+    links: seeds.map((s) => ({
       recordingId: s.id,
       platform: 'deezer' as const,
       url: `https://www.deezer.com/track/${s.id}`,
@@ -131,6 +132,27 @@ function corpusData(): CorpusData {
       confidence: 1,
     })),
     weights: buildWeights(streamable),
+  };
+}
+
+/** Build a provider over the given seeds in a fresh in-memory database. */
+async function providerFor(seeds: Seed[]): Promise<PostgresCorpusProvider> {
+  const db = new PGlite();
+  await exportCorpus(db, corpusData(seeds));
+  return new PostgresCorpusProvider({ query: (sql, params) => db.query(sql, params) });
+}
+
+/** A spin input pinned to one path, varying only the recording draw. The solo
+ * corpora below have a single facet value / artist / release group, so the
+ * facet, artist, and release-group draws are immaterial. */
+function recordingProbe(recordingDraw: number): SpinInput {
+  return {
+    facet: 'decade',
+    facetDraw: 0,
+    artistDraws: [0],
+    releaseGroupDraw: 0,
+    recordingDraw,
+    exclude: new Set(),
   };
 }
 
@@ -157,11 +179,12 @@ describe('PostgresCorpusProvider', () => {
     await expect(emptyProvider.ping()).rejects.toThrow();
   });
 
-  it('pickRecording handles the r->1.0 boundary (clamped to the last recording)', async () => {
+  it('handles the recording draw -> 1.0 boundary (clamped to the last recording)', async () => {
     // Without the LEAST clamp, floor(1*m)+1 = m+1 misses every row and returns null.
-    const id = await provider.pickRecording('rg1', 1);
-    expect(id).not.toBeNull();
-    expect(SEEDS.map((s) => s.id)).toContain(id);
+    const pair = await providerFor([SEEDS[0]!, SEEDS[1]!]); // both a1 / rg1
+    const pick = await pair.spin(recordingProbe(1));
+    expect(pick).not.toBeNull();
+    expect(['r1', 'r2']).toContain(pick?.song.recordingId);
   });
 
   it('walks to valid songs from the seeded corpus', async () => {
@@ -178,9 +201,10 @@ describe('PostgresCorpusProvider', () => {
     expect(ids.size).toBeGreaterThan(1);
   });
 
-  it('loads full song metadata', async () => {
-    const song = await provider.loadSong('r1');
-    expect(song).toMatchObject({
+  it('loads full song metadata and links', async () => {
+    const solo = await providerFor([SEEDS[0]!]); // single recording, any draw lands on it
+    const pick = await solo.spin(recordingProbe(0));
+    expect(pick?.song).toMatchObject({
       recordingId: 'r1',
       title: 'Paranoid Android',
       artist: 'Radiohead',
@@ -188,12 +212,16 @@ describe('PostgresCorpusProvider', () => {
       releaseTitle: 'OK Computer',
       year: 1997,
     });
-    expect([...song.genres].sort()).toEqual(['alternative', 'rock']);
+    expect([...(pick?.song.genres ?? [])].sort()).toEqual(['alternative', 'rock']);
+    expect(pick?.links).toEqual([
+      { platform: 'deezer', url: 'https://www.deezer.com/track/r1', kind: 'exact' },
+    ]);
   });
 
-  it('maps the draw extremes to the ends of a partition', async () => {
-    const low = await provider.pickRecording('rg1', 0);
-    const high = await provider.pickRecording('rg1', 0.999);
+  it('maps the recording draw extremes to the ends of a partition', async () => {
+    const pair = await providerFor([SEEDS[0]!, SEEDS[1]!]); // both a1 / rg1
+    const low = (await pair.spin(recordingProbe(0)))?.song.recordingId;
+    const high = (await pair.spin(recordingProbe(0.999)))?.song.recordingId;
     expect([low, high].sort()).toEqual(['r1', 'r2']);
     expect(low).not.toBe(high);
   });
