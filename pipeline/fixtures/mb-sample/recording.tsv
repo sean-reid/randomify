@@ -1,0 +1,5 @@
+id	gid	name	artist_id	release_group_id	length_ms	language
+100	rec-gid-paranoid	Paranoid Android	1	10	383000	eng
+101	rec-gid-karma	Karma Police	1	10	261000	eng
+102	rec-gid-corcovado	Corcovado	2	11	138000	por
+103	rec-gid-jolene	Jolene	3	12	162000	eng
