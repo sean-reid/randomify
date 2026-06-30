@@ -20,7 +20,8 @@
     "test": "vitest run",
     "plan": "node dist/main.js",
     "load:musicbrainz": "node dist/run/load-musicbrainz.js",
-    "resolve": "node dist/run/resolve.js"
+    "resolve": "node dist/run/resolve.js",
+    "rebuild-weights": "node dist/run/weights-cli.js"
   },
   "dependencies": {
     "@duckdb/node-api": "1.5.4-r.1",

@@ -143,45 +143,39 @@ export async function exportCorpus(client: SqlClient, data: CorpusData): Promise
       ['recording_id', 'platform', 'url', 'kind', 'confidence'],
       data.links.map((l) => [l.recordingId, l.platform, l.url, l.kind, l.confidence]),
     );
-    await insertRows(
-      client,
-      'facet_value',
-      ['facet_type', 'facet_id', 'weight', 'cum_weight'],
-      data.weights.facetValues.map((f) => [f.facetType, f.facetId, f.weight, f.cumWeight]),
-    );
-    await insertRows(
-      client,
-      'facet_artist',
-      ['facet_type', 'facet_id', 'artist_id', 'weight', 'cum_weight'],
-      data.weights.facetArtists.map((f) => [
-        f.facetType,
-        f.facetId,
-        f.artistId,
-        f.weight,
-        f.cumWeight,
-      ]),
-    );
-    await insertRows(
-      client,
-      'artist_release_group',
-      ['artist_id', 'release_group_id', 'weight', 'cum_weight'],
-      data.weights.artistReleaseGroups.map((a) => [
-        a.artistId,
-        a.releaseGroupId,
-        a.weight,
-        a.cumWeight,
-      ]),
-    );
-    await insertRows(
-      client,
-      'release_group_recording',
-      ['release_group_id', 'recording_id', 'cum_index'],
-      data.weights.releaseGroupRecordings.map((r) => [r.releaseGroupId, r.recordingId, r.cumIndex]),
-    );
+    await insertWeights(client, data.weights);
 
     await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;
   }
+}
+
+/** Insert the four tempered prefix-sum weight index tables. */
+export async function insertWeights(client: SqlClient, weights: CorpusWeights): Promise<void> {
+  await insertRows(
+    client,
+    'facet_value',
+    ['facet_type', 'facet_id', 'weight', 'cum_weight'],
+    weights.facetValues.map((f) => [f.facetType, f.facetId, f.weight, f.cumWeight]),
+  );
+  await insertRows(
+    client,
+    'facet_artist',
+    ['facet_type', 'facet_id', 'artist_id', 'weight', 'cum_weight'],
+    weights.facetArtists.map((f) => [f.facetType, f.facetId, f.artistId, f.weight, f.cumWeight]),
+  );
+  await insertRows(
+    client,
+    'artist_release_group',
+    ['artist_id', 'release_group_id', 'weight', 'cum_weight'],
+    weights.artistReleaseGroups.map((a) => [a.artistId, a.releaseGroupId, a.weight, a.cumWeight]),
+  );
+  await insertRows(
+    client,
+    'release_group_recording',
+    ['release_group_id', 'recording_id', 'cum_index'],
+    weights.releaseGroupRecordings.map((r) => [r.releaseGroupId, r.recordingId, r.cumIndex]),
+  );
 }
