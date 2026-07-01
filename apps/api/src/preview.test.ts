@@ -4,7 +4,7 @@ import { resolvePreview, isDeezerPreviewUrl, type PreviewFetch } from './preview
 const ok = (body: unknown): PreviewFetch => {
   const fn = ((url: string) => {
     (fn as PreviewFetch & { url?: string }).url = url;
-    return Promise.resolve({ ok: true, json: () => Promise.resolve(body) });
+    return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) });
   }) as PreviewFetch & { url?: string };
   return fn;
 };
@@ -17,26 +17,41 @@ describe('resolvePreview', () => {
     }) as PreviewFetch & {
       url?: string;
     };
-    const preview = await resolvePreview('123', fn);
+    const outcome = await resolvePreview('123', fn);
     expect(fn.url).toBe('https://api.deezer.com/2.0/track/123');
-    expect(preview).toBe('https://cdnt-preview.dzcdn.net/fresh.mp3?hdnea=exp');
+    expect(outcome).toEqual({
+      kind: 'ok',
+      url: 'https://cdnt-preview.dzcdn.net/fresh.mp3?hdnea=exp',
+    });
   });
 
-  it('returns null when Deezer reports an error', async () => {
-    expect(await resolvePreview('1', ok({ error: { type: 'DataException' } }))).toBeNull();
+  it('reports quota when Deezer returns error code 4 (throttled, HTTP 200)', async () => {
+    const outcome = await resolvePreview(
+      '1',
+      ok({ error: { type: 'Exception', code: 4, message: 'Quota limit exceeded' } }),
+    );
+    expect(outcome).toEqual({ kind: 'quota' });
   });
 
-  it('returns null when the track has no preview', async () => {
-    expect(await resolvePreview('1', ok({ id: 1, preview: '' }))).toBeNull();
+  it('reports a deezer_error for other body errors (e.g. unknown track)', async () => {
+    const outcome = await resolvePreview('1', ok({ error: { type: 'DataException', code: 800 } }));
+    expect(outcome).toEqual({ kind: 'deezer_error', code: 800 });
   });
 
-  it('returns null on a non-ok response', async () => {
-    const fn: PreviewFetch = () => Promise.resolve({ ok: false, json: () => Promise.resolve({}) });
-    expect(await resolvePreview('1', fn)).toBeNull();
+  it('reports none when the track has no preview', async () => {
+    expect(await resolvePreview('1', ok({ id: 1, preview: '' }))).toEqual({ kind: 'none' });
+  });
+
+  it('reports http_error with the status on a non-ok response', async () => {
+    const fn: PreviewFetch = () =>
+      Promise.resolve({ ok: false, status: 503, json: () => Promise.resolve({}) });
+    expect(await resolvePreview('1', fn)).toEqual({ kind: 'http_error', status: 503 });
   });
 
   it('rejects a preview URL that is not on a Deezer CDN host', async () => {
-    expect(await resolvePreview('1', ok({ preview: 'https://evil.example/x.mp3' }))).toBeNull();
+    expect(await resolvePreview('1', ok({ preview: 'https://evil.example/x.mp3' }))).toEqual({
+      kind: 'deezer_error',
+    });
   });
 });
 
