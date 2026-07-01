@@ -26,6 +26,23 @@ function emit(env: Env, endpoint: string, status: number, outcome: string, ms: n
 }
 
 /**
+ * Raise a coalesced failure alert off the request path (see AlertCoalescer).
+ * No-op without the ALERTS binding, and never throws into the caller.
+ */
+function raiseAlert(env: Env, ctx: ExecutionContext, mode: string, detail: string): void {
+  if (!env.ALERTS) return;
+  const stub = env.ALERTS.get(env.ALERTS.idFromName('alerts'));
+  // A DO stub.fetch() is an in-process call routed by the stub id, not a network
+  // request; the URL is a required placeholder and its host/path are ignored.
+  ctx.waitUntil(
+    stub
+      .fetch('https://do/notify', { method: 'POST', body: JSON.stringify({ mode, detail }) })
+      .then(() => undefined)
+      .catch(() => undefined),
+  );
+}
+
+/**
  * Mint a fresh Deezer preview for a track id and redirect to it. The stored
  * preview URL expires within hours, so it cannot be served directly; this route
  * resolves a fresh one at play time. The redirect is cached briefly at the edge
@@ -57,6 +74,7 @@ async function handlePreview(
   } catch (err) {
     console.error('preview fetch failed', err);
     emit(env, 'preview', 502, 'fetch_threw', ms());
+    raiseAlert(env, ctx, 'preview_threw', 'preview fetch threw');
     return json({ error: 'preview unavailable' }, 502);
   }
   // Deezer throttling (200 body error.code 4) surfaces as `quota`; a real outage
@@ -64,11 +82,13 @@ async function handlePreview(
   if (outcome.kind === 'quota') {
     console.error('preview deezer quota');
     emit(env, 'preview', 429, 'quota', ms());
+    raiseAlert(env, ctx, 'preview_quota', 'Deezer quota limit (body error code 4)');
     return json({ error: 'busy' }, 429);
   }
   if (outcome.kind === 'http_error') {
     console.error('preview deezer http error', outcome.status);
     emit(env, 'preview', 502, 'deezer_http', ms());
+    raiseAlert(env, ctx, 'preview_upstream', `Deezer HTTP ${outcome.status}`);
     return json({ error: 'preview unavailable' }, 502);
   }
   if (outcome.kind !== 'ok') {
@@ -123,6 +143,7 @@ export default {
       } catch (err) {
         console.error('health check failed', err);
         emit(env, 'health', 503, 'db_unreachable', Date.now() - t0);
+        raiseAlert(env, ctx, 'health_db', 'health DB ping failed');
         return json({ status: 'degraded', corpus: corpus.kind }, 503);
       } finally {
         ctx.waitUntil(corpus.close().catch(() => {}));
@@ -145,6 +166,7 @@ export default {
       } catch (err) {
         console.error('spin failed', err);
         emit(env, 'spin', 503, 'corpus_unavailable', Date.now() - t0);
+        raiseAlert(env, ctx, 'spin_unavailable', 'corpus unavailable');
         return json({ error: 'corpus unavailable' }, 503);
       } finally {
         ctx.waitUntil(corpus.close().catch(() => {}));
@@ -159,3 +181,5 @@ export default {
     return json({ error: 'not found' }, 404);
   },
 } satisfies ExportedHandler<Env>;
+
+export { AlertCoalescer } from './alerter.js';

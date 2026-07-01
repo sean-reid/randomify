@@ -7,4 +7,8 @@
 export interface Env {
   HYPERDRIVE?: Hyperdrive;
   METRICS?: AnalyticsEngineDataset;
+  /** Coalescing alert Durable Object; absent in local dev/tests. */
+  ALERTS?: DurableObjectNamespace;
+  /** ntfy topic for failure pushes (a Worker secret); absent = no push. */
+  NTFY_TOPIC?: string;
 }
