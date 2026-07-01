@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.3.0](https://github.com/sean-reid/randomify/compare/v0.2.0...v0.3.0) (2026-07-01)
+
+
+### Features
+
+* **api:** coalesced ntfy alerts on failure modes ([#74](https://github.com/sean-reid/randomify/issues/74)) ([671cfb5](https://github.com/sean-reid/randomify/commit/671cfb57c41e95221db90ca09b2e6b61cbee3316))
+* **api:** emit per-request telemetry to Analytics Engine ([#73](https://github.com/sean-reid/randomify/issues/73)) ([6ed2759](https://github.com/sean-reid/randomify/commit/6ed2759bd2b4b959c66f67dd01d011c34ebe5ba8))
+* **links:** only surface trustworthy streaming links ([#70](https://github.com/sean-reid/randomify/issues/70)) ([cf5fd0d](https://github.com/sean-reid/randomify/commit/cf5fd0d9633db7f79fe27df892f44e11bf5bfa42))
+* **web:** add title, OG/Twitter meta, icons, manifest, robots ([#71](https://github.com/sean-reid/randomify/issues/71)) ([0c36080](https://github.com/sean-reid/randomify/commit/0c36080d0f7e53541b3e85e0003d4c336a05acec))
+
+
+### Bug Fixes
+
+* **api:** classify preview lookup outcomes instead of collapsing to null ([#72](https://github.com/sean-reid/randomify/issues/72)) ([d4ecfc1](https://github.com/sean-reid/randomify/commit/d4ecfc17de2b676a8489380d98bd226b83c0eb20))
+* **cron:** launchd nvm PATH + cron-status detection ([#65](https://github.com/sean-reid/randomify/issues/65)) ([e6c3c32](https://github.com/sean-reid/randomify/commit/e6c3c32f8a36778e5519916f9afa284bfc50605b))
+
 ## [0.2.0](https://github.com/sean-reid/randomify/compare/v0.1.0...v0.2.0) (2026-06-30)
 
 
