@@ -21,6 +21,16 @@ id = "b3a5910cfb044a3d99060c7784a40baf"
 binding = "METRICS"
 dataset = "randomify_api_dev"
 
+# Coalescing alert Durable Object (failure-mode ntfy pushes). Bound + migrated
+# per environment because named envs do not inherit top-level config.
+[[durable_objects.bindings]]
+name = "ALERTS"
+class_name = "AlertCoalescer"
+
+[[migrations]]
+tag = "v1"
+new_classes = ["AlertCoalescer"]
+
 [env.staging]
 name = "randomify-api-staging"
 routes = [{ pattern = "api.randomify-staging.dwainosaur.com", custom_domain = true }]
@@ -30,6 +40,12 @@ id = "75213f4579c34270ac23cee10aed26e2"
 [[env.staging.analytics_engine_datasets]]
 binding = "METRICS"
 dataset = "randomify_api_staging"
+[[env.staging.durable_objects.bindings]]
+name = "ALERTS"
+class_name = "AlertCoalescer"
+[[env.staging.migrations]]
+tag = "v1"
+new_classes = ["AlertCoalescer"]
 
 [env.production]
 name = "randomify-api-production"
@@ -40,3 +56,9 @@ id = "09e9b966476548d89c9f977a99aeb7a0"
 [[env.production.analytics_engine_datasets]]
 binding = "METRICS"
 dataset = "randomify_api_production"
+[[env.production.durable_objects.bindings]]
+name = "ALERTS"
+class_name = "AlertCoalescer"
+[[env.production.migrations]]
+tag = "v1"
+new_classes = ["AlertCoalescer"]
