@@ -15,12 +15,21 @@ routes = [{ pattern = "api.randomify-dev.dwainosaur.com", custom_domain = true }
 binding = "HYPERDRIVE"
 id = "b3a5910cfb044a3d99060c7784a40baf"
 
+# Per-request telemetry (failure modes + spin/preview counts). Non-inheritable,
+# so declared per environment with its own dataset.
+[[analytics_engine_datasets]]
+binding = "METRICS"
+dataset = "randomify_api_dev"
+
 [env.staging]
 name = "randomify-api-staging"
 routes = [{ pattern = "api.randomify-staging.dwainosaur.com", custom_domain = true }]
 [[env.staging.hyperdrive]]
 binding = "HYPERDRIVE"
 id = "75213f4579c34270ac23cee10aed26e2"
+[[env.staging.analytics_engine_datasets]]
+binding = "METRICS"
+dataset = "randomify_api_staging"
 
 [env.production]
 name = "randomify-api-production"
@@ -28,3 +37,6 @@ routes = [{ pattern = "api.randomify.dwainosaur.com", custom_domain = true }]
 [[env.production.hyperdrive]]
 binding = "HYPERDRIVE"
 id = "09e9b966476548d89c9f977a99aeb7a0"
+[[env.production.analytics_engine_datasets]]
+binding = "METRICS"
+dataset = "randomify_api_production"
