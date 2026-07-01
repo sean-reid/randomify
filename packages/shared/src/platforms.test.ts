@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PLATFORM_BY_ID, PLATFORMS, searchLink, searchQuery } from './platforms.js';
+import { PLATFORM_BY_ID, PLATFORMS, searchLink, searchQuery, shouldShowLink } from './platforms.js';
 
 describe('platform registry', () => {
   it('lists all eight platforms with unique ids', () => {
@@ -19,6 +19,31 @@ describe('platform registry', () => {
       expect(url.startsWith('https://')).toBe(true);
       expect(() => new URL(url)).not.toThrow();
     }
+  });
+
+  it('marks search-fallback reliability on every platform', () => {
+    for (const p of PLATFORMS) {
+      expect(typeof p.searchFallbackReliable).toBe('boolean');
+    }
+    // Only the fractional/radio-model catalogs are unreliable.
+    const unreliable = PLATFORMS.filter((p) => !p.searchFallbackReliable)
+      .map((p) => p.id)
+      .sort();
+    expect(unreliable).toEqual(['bandcamp', 'pandora']);
+  });
+});
+
+describe('shouldShowLink', () => {
+  it('always shows an exact link, even on a low-coverage platform', () => {
+    expect(shouldShowLink({ platform: 'bandcamp', kind: 'exact' })).toBe(true);
+    expect(shouldShowLink({ platform: 'pandora', kind: 'exact' })).toBe(true);
+  });
+
+  it('shows a search fallback only for reliable big-catalog platforms', () => {
+    expect(shouldShowLink({ platform: 'spotify', kind: 'search_fallback' })).toBe(true);
+    expect(shouldShowLink({ platform: 'deezer', kind: 'search_fallback' })).toBe(true);
+    expect(shouldShowLink({ platform: 'bandcamp', kind: 'search_fallback' })).toBe(false);
+    expect(shouldShowLink({ platform: 'pandora', kind: 'search_fallback' })).toBe(false);
   });
 });
 

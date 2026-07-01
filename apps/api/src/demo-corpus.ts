@@ -2,6 +2,7 @@ import {
   DEFAULT_ALPHA,
   PLATFORMS,
   searchLink,
+  shouldShowLink,
   weightedPick,
   type Facet,
   type PlatformLink,
@@ -340,7 +341,7 @@ export class DemoCorpusProvider implements CorpusProvider {
   }
 
   private toLinks(s: DemoSong): PlatformLink[] {
-    return PLATFORMS.map((p) => searchLink(p.id, s.artist, s.title));
+    return PLATFORMS.map((p) => searchLink(p.id, s.artist, s.title)).filter(shouldShowLink);
   }
 
   private require(recordingId: string): DemoSong {

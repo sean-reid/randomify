@@ -1,4 +1,4 @@
-import { FACETS, PLATFORMS } from '@randomify/shared';
+import { FACETS, PLATFORMS, shouldShowLink } from '@randomify/shared';
 import { describe, expect, it } from 'vitest';
 import type { CorpusProvider } from './corpus.js';
 import { DemoCorpusProvider } from './demo-corpus.js';
@@ -18,19 +18,27 @@ function mulberry32(seed: number): () => number {
 describe('handleSpin', () => {
   const corpus = new DemoCorpusProvider();
 
+  // The demo provider yields only search-fallback links, so filtering drops the
+  // unreliable platforms (bandcamp, pandora) and keeps the big-catalog ones.
+  const shownPlatforms = PLATFORMS.filter((p) =>
+    shouldShowLink({ platform: p.id, kind: 'search_fallback' }),
+  );
+
   it('returns a complete spin response', async () => {
     const result = await handleSpin(corpus, { rng: mulberry32(42) });
     expect(result.song.recordingId).toBeTruthy();
     expect(result.song.title).toBeTruthy();
     expect(result.song.artist).toBeTruthy();
     expect(FACETS).toContain(result.facet);
-    expect(result.links).toHaveLength(PLATFORMS.length);
+    expect(result.links).toHaveLength(shownPlatforms.length);
   });
 
-  it('produces links for every platform', async () => {
+  it('shows the reliable big-catalog platforms and omits bandcamp/pandora', async () => {
     const result = await handleSpin(corpus, { rng: mulberry32(7) });
     const platforms = new Set(result.links.map((l) => l.platform));
-    for (const p of PLATFORMS) expect(platforms.has(p.id)).toBe(true);
+    for (const p of shownPlatforms) expect(platforms.has(p.id)).toBe(true);
+    expect(platforms.has('bandcamp')).toBe(false);
+    expect(platforms.has('pandora')).toBe(false);
   });
 
   it('reaches a variety of songs across many spins', async () => {
