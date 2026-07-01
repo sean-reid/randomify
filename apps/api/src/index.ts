@@ -1,6 +1,6 @@
 import { getCorpus } from './corpus-factory.js';
 import { handleSpin } from './spin.js';
-import { resolvePreview } from './preview.js';
+import { resolvePreview, type PreviewOutcome } from './preview.js';
 import type { Env } from './env.js';
 
 const CORS_HEADERS: Record<string, string> = {
@@ -28,17 +28,29 @@ async function handlePreview(
   const hit = await cache.match(request);
   if (hit) return hit;
 
-  let preview: string | null;
+  let outcome: PreviewOutcome;
   try {
-    preview = await resolvePreview(id, (u) => fetch(u, { headers: { 'user-agent': PREVIEW_UA } }));
-  } catch {
+    outcome = await resolvePreview(id, (u) => fetch(u, { headers: { 'user-agent': PREVIEW_UA } }));
+  } catch (err) {
+    console.error('preview fetch failed', err);
     return json({ error: 'preview unavailable' }, 502);
   }
-  if (!preview) return json({ error: 'no preview' }, 404);
+  // Deezer throttling (200 body error.code 4) surfaces as `quota`; a real outage
+  // as `http_error`; a track with no clip or a rejected URL as none/deezer_error.
+  if (outcome.kind === 'quota') {
+    console.error('preview deezer quota');
+    return json({ error: 'busy' }, 429);
+  }
+  if (outcome.kind === 'http_error') {
+    console.error('preview deezer http error', outcome.status);
+    return json({ error: 'preview unavailable' }, 502);
+  }
+  if (outcome.kind !== 'ok') return json({ error: 'no preview' }, 404);
 
+  // Only a validated preview is ever cached and served.
   const res = new Response(null, {
     status: 302,
-    headers: { location: preview, 'cache-control': 'public, max-age=45', ...CORS_HEADERS },
+    headers: { location: outcome.url, 'cache-control': 'public, max-age=45', ...CORS_HEADERS },
   });
   ctx.waitUntil(cache.put(request, res.clone()));
   return res;
