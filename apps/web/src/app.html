@@ -2,12 +2,37 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
+    <title>randomify - a random song from everything ever recorded</title>
     <link rel="icon" href="%sveltekit.assets%/favicon.svg" />
+    <link rel="icon" href="%sveltekit.assets%/favicon.ico" sizes="32x32" />
+    <link rel="apple-touch-icon" href="%sveltekit.assets%/apple-touch-icon.png" />
+    <link rel="manifest" href="%sveltekit.assets%/manifest.webmanifest" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#141414" />
     <meta
       name="description"
       content="A random song from everything ever recorded, with links to play it anywhere."
     />
+
+    <!-- Open Graph / Twitter. Absolute URLs on the public domain so link scrapers resolve them. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="randomify" />
+    <meta property="og:title" content="randomify - a random song from everything ever recorded" />
+    <meta
+      property="og:description"
+      content="A random song from everything ever recorded, with links to play it anywhere."
+    />
+    <meta property="og:url" content="https://randomify.net/" />
+    <meta property="og:image" content="https://randomify.net/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="randomify - a random song from everything ever recorded" />
+    <meta
+      name="twitter:description"
+      content="A random song from everything ever recorded, with links to play it anywhere."
+    />
+    <meta name="twitter:image" content="https://randomify.net/og.png" />
     %sveltekit.head%
   </head>
   <body data-sveltekit-preload-data="hover">
