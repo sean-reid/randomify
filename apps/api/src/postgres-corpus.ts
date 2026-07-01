@@ -1,5 +1,6 @@
 import {
   PLATFORM_BY_ID,
+  shouldShowLink,
   type LinkKind,
   type PlatformId,
   type PlatformLink,
@@ -149,6 +150,7 @@ function toLinks(value: unknown): PlatformLink[] {
   if (!Array.isArray(arr)) return [];
   return (arr as Array<{ platform: PlatformId; url: string; kind: LinkKind }>)
     .map((l) => ({ platform: l.platform, url: String(l.url), kind: l.kind }))
+    .filter(shouldShowLink)
     .sort(
       (a, b) => (PLATFORM_ORDER.get(a.platform) ?? 99) - (PLATFORM_ORDER.get(b.platform) ?? 99),
     );
