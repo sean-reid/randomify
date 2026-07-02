@@ -33,7 +33,7 @@ jobs:
       - name: Build web (dev)
         run: pnpm --filter @randomify/web build
         env:
-          PUBLIC_RANDOMIFY_API: https://api.randomify-dev.dwainosaur.com
+          PUBLIC_RANDOMIFY_API: https://api.dev.randomify.net
       - name: Deploy web to Pages (dev)
         run: >-
           pnpm --filter @randomify/web exec wrangler pages deploy
@@ -61,7 +61,7 @@ jobs:
       - name: Build web (staging)
         run: pnpm --filter @randomify/web build
         env:
-          PUBLIC_RANDOMIFY_API: https://api.randomify-staging.dwainosaur.com
+          PUBLIC_RANDOMIFY_API: https://api.staging.randomify.net
       - name: Deploy web to Pages (staging)
         run: >-
           pnpm --filter @randomify/web exec wrangler pages deploy
@@ -91,7 +91,7 @@ jobs:
       - name: Build web (production)
         run: pnpm --filter @randomify/web build
         env:
-          PUBLIC_RANDOMIFY_API: https://api.randomify.dwainosaur.com
+          PUBLIC_RANDOMIFY_API: https://api.randomify.net
       - name: Deploy web to Pages (production)
         run: >-
           pnpm --filter @randomify/web exec wrangler pages deploy
