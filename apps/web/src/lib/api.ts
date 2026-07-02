@@ -5,7 +5,7 @@ import type { RecentArtists } from './recent.js';
 declare const __RANDOMIFY_API__: string;
 
 /** Dev API for preview deployments (*.pages.dev) and other non-environment hosts. */
-const DEV_API = 'https://api.randomify-dev.dwainosaur.com';
+const DEV_API = 'https://api.dev.randomify.net';
 
 /**
  * Resolve the API base. Production, staging, and dev builds bake in their own
@@ -16,10 +16,8 @@ export function resolveApiBase(): string {
   const configured = typeof __RANDOMIFY_API__ === 'string' ? __RANDOMIFY_API__ : '';
   if (configured) return configured;
   if (typeof location !== 'undefined') {
-    const { protocol, hostname } = location;
+    const { hostname } = location;
     if (hostname === 'localhost' || hostname === '127.0.0.1') return 'http://localhost:8787';
-    if (hostname.endsWith('.dwainosaur.com')) return `${protocol}//api.${hostname}`;
-    return DEV_API;
   }
   return DEV_API;
 }
