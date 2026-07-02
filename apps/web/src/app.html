@@ -37,5 +37,12 @@
   </head>
   <body data-sveltekit-preload-data="hover">
     <div style="display: contents">%sveltekit.body%</div>
+    <!-- Cloudflare Web Analytics: cookieless, no PII. Automatic edge injection does
+         not fire for Pages-served hostnames, so the beacon is included here. -->
+    <script
+      defer
+      src="https://static.cloudflareinsights.com/beacon.min.js"
+      data-cf-beacon='{"token": "cae3558b3fd440f690e7aa4d1830dd01"}'
+    ></script>
   </body>
 </html>
