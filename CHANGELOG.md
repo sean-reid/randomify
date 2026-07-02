@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/sean-reid/randomify/compare/v0.3.0...v0.4.0) (2026-07-02)
+
+
+### Features
+
+* **web:** point web app at the randomify.net API ([#77](https://github.com/sean-reid/randomify/issues/77)) ([49d6b37](https://github.com/sean-reid/randomify/commit/49d6b37140eb668ad1fafc834de6e53ada4b2aa7))
+
 ## [0.3.0](https://github.com/sean-reid/randomify/compare/v0.2.0...v0.3.0) (2026-07-01)
 
 
