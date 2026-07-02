@@ -9,7 +9,7 @@ const CORS_HEADERS: Record<string, string> = {
   'access-control-allow-headers': 'content-type',
 };
 
-const PREVIEW_UA = 'randomify/0.1 (+https://randomify.dwainosaur.com)';
+const PREVIEW_UA = 'randomify/0.1 (+https://randomify.net)';
 
 /**
  * Fire-and-forget per-request telemetry to Analytics Engine. No-op when the

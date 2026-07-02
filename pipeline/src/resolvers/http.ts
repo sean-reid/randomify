@@ -8,7 +8,7 @@ export interface JsonResponse {
 export type FetchLike = (url: string) => Promise<JsonResponse>;
 
 /** Identify ourselves politely to the APIs we call. */
-export const USER_AGENT = 'randomify/0.1 (+https://randomify.dwainosaur.com)';
+export const USER_AGENT = 'randomify/0.1 (+https://randomify.net)';
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
