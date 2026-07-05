@@ -1,6 +1,8 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
-  import { PLATFORM_BY_ID, type Song, type SpinResponse } from '@randomify/shared';
+  import { onDestroy } from 'svelte';
+  import { page } from '$app/state';
+  import { goto } from '$app/navigation';
+  import { parseFilters, PLATFORM_BY_ID, type Song, type SpinResponse } from '@randomify/shared';
   import { spin } from '$lib/api';
   import { RecentArtists } from '$lib/recent';
 
@@ -10,6 +12,16 @@
   let index = $state(-1);
   let loading = $state(false);
   let error = $state<string | null>(null);
+  // Set when active filters match no song; distinct from an error so the UI can
+  // prompt to loosen filters rather than show a failure.
+  let noMatch = $state(false);
+
+  // Active filters come from the URL query string, so a filtered shuffle is
+  // shareable and bookmarkable. The FilterBar writes them via goto(); here we
+  // only read them and react.
+  const filters = $derived(parseFilters((key) => page.url.searchParams.get(key)));
+  const filterKey = $derived(JSON.stringify(filters));
+  let lastFilterKey: string | undefined;
   let playing = $state(false);
   let playerError = $state(false);
   let audioEl = $state<HTMLAudioElement>();
@@ -25,7 +37,7 @@
   const HISTORY_CAP = 60;
 
   const recent = new RecentArtists();
-  let prefetched: Promise<SpinResponse> | null = null;
+  let prefetched: Promise<SpinResponse | null> | null = null;
 
   const current = $derived(index >= 0 ? (history[index] ?? null) : null);
   const song = $derived(current?.song ?? null);
@@ -158,11 +170,18 @@
     if (loading) return;
     loading = true;
     error = null;
+    noMatch = false;
     try {
       let result: SpinResponse | null = null;
       for (let attempt = 0; attempt < 6 && !result; attempt += 1) {
-        const candidate = await (prefetched ?? spin(recent));
+        const candidate = await (prefetched ?? spin(recent, filters));
         prefetched = null;
+        // A null candidate means the active filters match nothing: a legitimate
+        // empty result, so stop retrying and prompt to loosen filters.
+        if (!candidate) {
+          noMatch = true;
+          return;
+        }
         const url = candidate.song.previewUrl;
         // Only commit a song we can actually play: it must have a preview and it
         // must load. Validate and warm the cover together so a committed song
@@ -175,7 +194,7 @@
           result = candidate;
         } else {
           recent.add(candidate.song.artistId);
-          prefetched = spin(recent);
+          prefetched = spin(recent, filters);
         }
       }
       if (!result) {
@@ -187,14 +206,29 @@
       index = history.length - 1;
       recent.add(result.song.artistId);
       // Warm the next spin and preload its cover so the next discover is instant.
-      const warm = spin(recent);
+      const warm = spin(recent, filters);
       prefetched = warm;
-      void warm.then((r) => loadCover(r.song.coverArtUrl));
+      void warm.then((r) => r && loadCover(r.song.coverArtUrl));
     } catch (e) {
       error = e instanceof Error ? e.message : 'Something went wrong.';
     } finally {
       loading = false;
     }
+  }
+
+  /** Reset the deck and discover under the current filters. Runs on first mount
+   * and whenever the URL filters change, so switching filters starts a fresh
+   * deck (the old songs may not match) and a stale prefetch is discarded. */
+  function restartForFilters(): void {
+    history = [];
+    index = -1;
+    prefetched = null;
+    void discover();
+  }
+
+  /** Clear all filters (used from the no-match prompt), which restarts discovery. */
+  function clearFilters(): void {
+    void goto(page.url.pathname, { keepFocus: true, noScroll: true });
   }
 
   /** Forward in the deck, or discover a fresh song when at the front. */
@@ -290,8 +324,12 @@
     return url.startsWith('https://') ? url : '#';
   }
 
-  onMount(() => {
-    void discover();
+  // Drives the first discovery and re-discovery on any filter change. Reading
+  // filterKey registers the dependency; the guard makes it fire once per change.
+  $effect(() => {
+    if (filterKey === lastFilterKey) return;
+    lastFilterKey = filterKey;
+    restartForFilters();
   });
 </script>
 
@@ -421,6 +459,11 @@
           {/each}
         </ul>
       </article>
+    {:else if noMatch}
+      <div class="notice" data-testid="no-match">
+        <p>No songs match these filters.</p>
+        <button class="linklike" onclick={clearFilters}>Clear filters</button>
+      </div>
     {:else if error}
       <p class="error" role="alert" data-testid="error">{error}</p>
     {:else}
@@ -724,6 +767,30 @@
   .error {
     color: #8a2b2b;
     font-size: 0.95rem;
+  }
+
+  .notice {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--ink-soft);
+    font-size: 0.95rem;
+    text-align: center;
+  }
+
+  .linklike {
+    appearance: none;
+    border: none;
+    background: none;
+    padding: 0;
+    color: var(--ink);
+    font: inherit;
+    text-decoration: underline;
+    cursor: pointer;
+  }
+  .linklike:hover {
+    color: var(--ink-soft);
   }
 
   .shuffle {
