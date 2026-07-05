@@ -1,4 +1,18 @@
-import { PLATFORMS, searchLink, type SpinResponse } from '@randomify/shared';
+import { PLATFORMS, searchLink, type FacetCatalog, type SpinResponse } from '@randomify/shared';
+
+/** A deterministic facet catalog for the filter UI tests. */
+export const SAMPLE_FACETS: FacetCatalog = {
+  genre: [
+    { value: 'rock', count: 12 },
+    { value: 'jazz', count: 5 },
+  ],
+  decade: [
+    { value: '1980', count: 6 },
+    { value: '1990', count: 8 },
+  ],
+  country: [{ value: 'GB', count: 9 }],
+  language: [{ value: 'eng', count: 20 }],
+};
 
 /** A deterministic spin response so the UI tests are stable. */
 export const SAMPLE_SPIN: SpinResponse = {
