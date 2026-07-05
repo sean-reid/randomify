@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/sean-reid/randomify/compare/v0.4.0...v0.5.0) (2026-07-02)
+
+
+### Features
+
+* **web:** add Cloudflare Web Analytics beacon ([#80](https://github.com/sean-reid/randomify/issues/80)) ([9988e49](https://github.com/sean-reid/randomify/commit/9988e49aafa02465a3549fc19e4a09d57319dc3c))
+
 ## [0.4.0](https://github.com/sean-reid/randomify/compare/v0.3.0...v0.4.0) (2026-07-02)
 
 
