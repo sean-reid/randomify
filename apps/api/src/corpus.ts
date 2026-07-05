@@ -1,4 +1,4 @@
-import type { Facet, PlatformLink, Song } from '@randomify/shared';
+import type { Facet, PlatformLink, Song, SpinFilters } from '@randomify/shared';
 
 /**
  * The uniform draws and anti-repeat state for one spin down the four-level
@@ -23,6 +23,19 @@ export interface SpinInput {
   exclude: ReadonlySet<string>;
 }
 
+/**
+ * A strict filtered spin. Unlike the unfiltered walk this is not a facet draw:
+ * the provider draws one recording matching every active filter (values within
+ * a dimension OR'd, dimensions AND'd) with a single weighted key, deprioritizing
+ * recently-seen artists. Resolves null when nothing matches (a legitimate empty
+ * result the caller surfaces, not a fall-through signal).
+ */
+export interface FilteredSpinInput {
+  filters: SpinFilters;
+  /** Artist ids seen recently this session, deprioritized to avoid repeats. */
+  exclude: ReadonlySet<string>;
+}
+
 /** A resolved spin: the recording plus its platform links. */
 export interface SpinPick {
   song: Song;
@@ -42,4 +55,6 @@ export interface CorpusProvider {
   /** Walk the hierarchy for one spin. Resolves null if `facet` has no values
    * (e.g. genres before the derived dump loads), so the caller can try another. */
   spin(input: SpinInput): Promise<SpinPick | null>;
+  /** Strict filtered spin. Resolves null when no recording matches the filters. */
+  spinFiltered(input: FilteredSpinInput): Promise<SpinPick | null>;
 }

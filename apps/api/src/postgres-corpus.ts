@@ -6,7 +6,7 @@ import {
   type PlatformLink,
   type Song,
 } from '@randomify/shared';
-import type { CorpusProvider, SpinInput, SpinPick } from './corpus.js';
+import type { CorpusProvider, FilteredSpinInput, SpinInput, SpinPick } from './corpus.js';
 
 /** Minimal Postgres client surface, satisfied by postgres.js and PGlite. */
 export interface SqlClient {
@@ -98,6 +98,43 @@ JOIN release_group rg ON rg.id = r.release_group_id
 `;
 
 /**
+ * One strict filtered spin. The prefix-sum walk cannot be filtered (removing rows
+ * corrupts its cumulative weights), so this draws over sample_recording instead:
+ * a weighted key `-ln(random()) / weight` (Efraimidis-Spirakis) picks one row in
+ * proportion to weight over whatever subset the predicates leave, in a single
+ * pass. Each predicate is skipped when its param is empty, so any combination of
+ * filters shares one statement. Values within a dimension are OR'd (ANY / array
+ * overlap); dimensions are AND'd. Recently-seen artists sort last but remain a
+ * fallback, so a tiny match set never returns null just from anti-repeat.
+ *
+ * $1 genres  $2 decades  $3 countries  $4 languages  $5 artist ids  $6 exclude
+ * (all comma-joined strings, per the string_to_array note on SPIN_SQL).
+ */
+const SPIN_FILTERED_SQL = `
+WITH picked AS (
+  SELECT recording_id FROM sample_recording s
+  WHERE ($1 = '' OR s.genres && string_to_array($1, ','))
+    AND ($2 = '' OR s.decade = ANY(string_to_array(NULLIF($2, ''), ',')::int[]))
+    AND ($3 = '' OR s.country = ANY(string_to_array(NULLIF($3, ''), ',')))
+    AND ($4 = '' OR s.language = ANY(string_to_array(NULLIF($4, ''), ',')))
+    AND ($5 = '' OR s.artist_id = ANY(string_to_array(NULLIF($5, ''), ',')))
+  ORDER BY (s.artist_id = ANY(string_to_array(NULLIF($6, ''), ','))), -ln(random()) / s.weight
+  LIMIT 1
+)
+SELECT r.id, r.title, r.artist_id, a.name AS artist, r.release_group_id,
+       rg.title AS release_title, r.year, r.isrc, r.duration_ms,
+       r.cover_art_url, r.preview_url, r.genres,
+       COALESCE((
+         SELECT json_agg(json_build_object('platform', platform, 'url', url, 'kind', kind))
+         FROM platform_link WHERE recording_id = r.id
+       ), '[]'::json) AS links
+FROM picked
+JOIN recording r ON r.id = picked.recording_id
+JOIN artist a ON a.id = r.artist_id
+JOIN release_group rg ON rg.id = r.release_group_id
+`;
+
+/**
  * Corpus backed by Postgres (Neon via Hyperdrive in production). A spin is a
  * single query down the tempered prefix-sum index (see SPIN_SQL).
  */
@@ -118,6 +155,21 @@ export class PostgresCorpusProvider implements CorpusProvider {
       input.artistDraws.join(','),
       input.releaseGroupDraw,
       input.recordingDraw,
+      [...input.exclude].join(','),
+    ]);
+    const row = rows[0];
+    if (!row) return null;
+    return { song: toSong(row), links: toLinks(row.links) };
+  }
+
+  async spinFiltered(input: FilteredSpinInput): Promise<SpinPick | null> {
+    const f = input.filters;
+    const { rows } = await this.client.query(SPIN_FILTERED_SQL, [
+      (f.genres ?? []).join(','),
+      (f.decades ?? []).join(','),
+      (f.countries ?? []).join(','),
+      (f.languages ?? []).join(','),
+      (f.artistIds ?? []).join(','),
       [...input.exclude].join(','),
     ]);
     const row = rows[0];

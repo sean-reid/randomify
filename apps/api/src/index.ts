@@ -1,3 +1,4 @@
+import { hasFilters, parseFilters } from '@randomify/shared';
 import { getCorpus } from './corpus-factory.js';
 import { handleSpin } from './spin.js';
 import { resolvePreview, type PreviewOutcome } from './preview.js';
@@ -154,14 +155,23 @@ export default {
       if (request.method !== 'GET') return json({ error: 'method not allowed' }, 405);
       const t0 = Date.now();
       const exclude = parseExclude(url.searchParams.get('exclude'));
+      const filters = parseFilters((key) => url.searchParams.get(key));
+      const filtered = hasFilters(filters);
       const corpus = getCorpus(env);
       try {
-        const result = await handleSpin(corpus.provider, { excludeArtistIds: exclude });
+        const result = await handleSpin(corpus.provider, { excludeArtistIds: exclude, filters });
+        // A filtered spin can legitimately match nothing; surface that as a 200
+        // with a null song (distinct from a 503 outage) so the client can prompt
+        // the user to loosen filters.
+        if (!result) {
+          emit(env, 'spin', 200, 'no_match', Date.now() - t0);
+          return json({ song: null, links: [] });
+        }
         // The corpus stores a relative /preview/{id} path; serve it from this
         // origin. A legacy absolute URL (pre-migration) is dropped, not served.
         const preview = result.song.previewUrl;
         result.song.previewUrl = preview?.startsWith('/') ? `${url.origin}${preview}` : null;
-        emit(env, 'spin', 200, 'ok', Date.now() - t0);
+        emit(env, 'spin', 200, filtered ? 'ok_filtered' : 'ok', Date.now() - t0);
         return json(result);
       } catch (err) {
         console.error('spin failed', err);

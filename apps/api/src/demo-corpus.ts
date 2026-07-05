@@ -7,9 +7,10 @@ import {
   type Facet,
   type PlatformLink,
   type Song,
+  type SpinFilters,
   type Weighted,
 } from '@randomify/shared';
-import type { CorpusProvider, SpinInput, SpinPick } from './corpus.js';
+import type { CorpusProvider, FilteredSpinInput, SpinInput, SpinPick } from './corpus.js';
 
 /** A demo song carries the facet attributes the sampler walks down. */
 interface DemoSong {
@@ -223,6 +224,17 @@ function decadeOf(year: number): string {
   return `${Math.floor(year / 10) * 10}s`;
 }
 
+/** True when a song satisfies every active filter (values within a dimension OR'd). */
+function matchesFilters(song: DemoSong, filters: SpinFilters): boolean {
+  if (filters.genres?.length && !filters.genres.some((g) => song.genres.includes(g))) return false;
+  if (filters.decades?.length && !filters.decades.includes(Math.floor(song.year / 10) * 10))
+    return false;
+  if (filters.countries?.length && !filters.countries.includes(song.country)) return false;
+  if (filters.languages?.length && !filters.languages.includes(song.language)) return false;
+  if (filters.artistIds?.length && !filters.artistIds.includes(song.artistId)) return false;
+  return true;
+}
+
 /** The facet values a song belongs to, for the chosen facet. */
 function facetValuesOf(song: DemoSong, facet: Facet): string[] {
   switch (facet) {
@@ -281,6 +293,17 @@ export class DemoCorpusProvider implements CorpusProvider {
 
     const s = this.require(recordingId);
     return Promise.resolve({ song: this.toSong(s), links: this.toLinks(s) });
+  }
+
+  /** Strict filtered spin: keep songs matching every dimension (OR within a
+   * dimension), prefer a non-excluded artist, and pick one. Null when none match. */
+  spinFiltered(input: FilteredSpinInput): Promise<SpinPick | null> {
+    const matches = DEMO_SONGS.filter((s) => matchesFilters(s, input.filters));
+    if (!matches.length) return Promise.resolve(null);
+    const preferred = matches.filter((s) => !input.exclude.has(s.artistId));
+    const pool = preferred.length ? preferred : matches;
+    const chosen = pool[Math.floor(Math.random() * pool.length)]!;
+    return Promise.resolve({ song: this.toSong(chosen), links: this.toLinks(chosen) });
   }
 
   private pickFacetValue(facet: Facet, r: number): string | null {
