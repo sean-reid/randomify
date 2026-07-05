@@ -46,9 +46,14 @@ job() {
   rm -f "$SCRATCH/mbdump-derived.tar.bz2"
 
   pnpm --dir "$RANDOMIFY_REPO" --filter @randomify/pipeline build >/dev/null
+  # Extracting the full MusicBrainz candidate set builds a large in-memory array
+  # (prioritize needs the whole set at once), which overran Node's ~4GB default
+  # heap and aborted (SIGABRT / OOM) as the dump grew. This box has 36GB, so give
+  # the step a generous heap. If it ever overruns this too, stream the extract.
   MB_DUMP_DIR="$SCRATCH/mbdump" \
     MB_CANDIDATE_LIMIT="${CANDIDATE_LIMIT:-}" \
     DATABASE_URL="$DATABASE_URL" \
+    NODE_OPTIONS="--max-old-space-size=12288" \
     pnpm --dir "$RANDOMIFY_REPO" --filter @randomify/pipeline refresh-backlog
 }
 
