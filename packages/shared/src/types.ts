@@ -52,3 +52,36 @@ export interface SpinResponse {
   /** Which facet drove this spin (useful for transparency and debugging). */
   facet: Facet;
 }
+
+/**
+ * Optional filters that narrow a spin to a strict slice of the catalog. Values
+ * within a dimension are OR'd; dimensions are AND'd. An empty/absent field means
+ * "no constraint on this dimension".
+ */
+export interface SpinFilters {
+  genres?: string[];
+  decades?: number[];
+  countries?: string[];
+  languages?: string[];
+  artistIds?: string[];
+}
+
+/** A facet value and how many songs currently carry it. */
+export interface FacetValue {
+  value: string;
+  count: number;
+}
+
+/** The available values per enumerable facet, for the filter pickers. */
+export interface FacetCatalog {
+  genre: FacetValue[];
+  decade: FacetValue[];
+  country: FacetValue[];
+  language: FacetValue[];
+}
+
+/** One artist search result for the multi-artist typeahead. */
+export interface ArtistHit {
+  id: string;
+  name: string;
+}
