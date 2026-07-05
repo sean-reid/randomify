@@ -25,7 +25,7 @@ describe('handleSpin', () => {
   );
 
   it('returns a complete spin response', async () => {
-    const result = await handleSpin(corpus, { rng: mulberry32(42) });
+    const result = (await handleSpin(corpus, { rng: mulberry32(42) }))!;
     expect(result.song.recordingId).toBeTruthy();
     expect(result.song.title).toBeTruthy();
     expect(result.song.artist).toBeTruthy();
@@ -34,7 +34,7 @@ describe('handleSpin', () => {
   });
 
   it('shows the reliable big-catalog platforms and omits bandcamp/pandora', async () => {
-    const result = await handleSpin(corpus, { rng: mulberry32(7) });
+    const result = (await handleSpin(corpus, { rng: mulberry32(7) }))!;
     const platforms = new Set(result.links.map((l) => l.platform));
     for (const p of shownPlatforms) expect(platforms.has(p.id)).toBe(true);
     expect(platforms.has('bandcamp')).toBe(false);
@@ -45,7 +45,7 @@ describe('handleSpin', () => {
     const rng = mulberry32(123);
     const seen = new Set<string>();
     for (let i = 0; i < 200; i++) {
-      seen.add((await handleSpin(corpus, { rng })).song.recordingId);
+      seen.add((await handleSpin(corpus, { rng }))!.song.recordingId);
     }
     expect(seen.size).toBeGreaterThan(5);
   });
@@ -56,7 +56,7 @@ describe('handleSpin', () => {
       const rng = mulberry32(5);
       let n = 0;
       for (let i = 0; i < 400; i++) {
-        const result = await handleSpin(corpus, { excludeArtistIds: exclude, rng });
+        const result = (await handleSpin(corpus, { excludeArtistIds: exclude, rng }))!;
         if (result.song.artistId === target) n++;
       }
       return n;
@@ -74,6 +74,7 @@ describe('handleSpin', () => {
     // A corpus that only knows decades (e.g. before the genre dump is loaded).
     const decadeOnly: CorpusProvider = {
       ping: () => Promise.resolve(),
+      spinFiltered: () => Promise.resolve(null),
       spin: (input) =>
         Promise.resolve(
           input.facet === 'decade'
@@ -98,9 +99,28 @@ describe('handleSpin', () => {
         ),
     };
     for (let i = 0; i < 50; i++) {
-      const result = await handleSpin(decadeOnly, { rng: mulberry32(i) });
+      const result = (await handleSpin(decadeOnly, { rng: mulberry32(i) }))!;
       expect(result.facet).toBe('decade');
       expect(result.song.recordingId).toBe('r1');
     }
+  });
+
+  it('takes the filtered path and returns only matching songs', async () => {
+    for (let i = 0; i < 30; i++) {
+      const result = await handleSpin(corpus, { filters: { genres: ['jazz'] } });
+      expect(result).not.toBeNull();
+      expect(result!.song.genres).toContain('jazz');
+      // A filtered spin is not driven by a single facet.
+      expect(result!.facet).toBeUndefined();
+    }
+  });
+
+  it('combines dimensions with AND and returns null when nothing matches', async () => {
+    // Miles Davis is the only US jazz in the demo set (Jobim's jazz is BR).
+    const us = await handleSpin(corpus, { filters: { genres: ['jazz'], countries: ['US'] } });
+    expect(us!.song.artistId).toBe('demo-art-miles');
+    // There is no French jazz in the demo set.
+    const none = await handleSpin(corpus, { filters: { genres: ['jazz'], countries: ['FR'] } });
+    expect(none).toBeNull();
   });
 });

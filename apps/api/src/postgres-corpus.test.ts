@@ -196,7 +196,7 @@ describe('PostgresCorpusProvider', () => {
     const ids = new Set<string>();
     const validIds = new Set(SEEDS.map((s) => s.id));
     for (let i = 0; i < 100; i++) {
-      const result = await handleSpin(provider, { rng });
+      const result = (await handleSpin(provider, { rng }))!;
       expect(validIds.has(result.song.recordingId)).toBe(true);
       expect(result.links).toHaveLength(1); // only the deezer link was seeded
       expect(result.links[0]?.platform).toBe('deezer');
@@ -235,7 +235,7 @@ describe('PostgresCorpusProvider', () => {
       const rng = mulberry32(5);
       let n = 0;
       for (let i = 0; i < 200; i++) {
-        const result = await handleSpin(provider, { excludeArtistIds: exclude, rng });
+        const result = (await handleSpin(provider, { excludeArtistIds: exclude, rng }))!;
         if (result.song.artistId === 'a1') n++;
       }
       return n;
@@ -244,5 +244,53 @@ describe('PostgresCorpusProvider', () => {
     const suppressed = await count(new Set(['a1']));
     expect(baseline).toBeGreaterThan(0);
     expect(suppressed).toBeLessThan(baseline);
+  });
+
+  describe('spinFiltered', () => {
+    const empty = new Set<string>();
+
+    it('returns only recordings matching a single-dimension filter', async () => {
+      for (let i = 0; i < 30; i++) {
+        const pick = await provider.spinFiltered({ filters: { genres: ['rock'] }, exclude: empty });
+        expect(pick).not.toBeNull();
+        expect(pick!.song.genres).toContain('rock');
+      }
+    });
+
+    it('ANDs dimensions and ORs within a dimension', async () => {
+      // jazz AND Brazil -> only Jobim (r3); rock is GB, country is US.
+      const jazzBr = await provider.spinFiltered({
+        filters: { genres: ['jazz'], countries: ['BR'] },
+        exclude: empty,
+      });
+      expect(jazzBr!.song.recordingId).toBe('r3');
+
+      // decade 1990 (Radiohead 1997) OR 1970 (Dolly 1973), never Jobim's 1960s.
+      for (let i = 0; i < 20; i++) {
+        const pick = await provider.spinFiltered({
+          filters: { decades: [1990, 1970] },
+          exclude: empty,
+        });
+        expect(['r1', 'r2', 'r4']).toContain(pick!.song.recordingId);
+      }
+    });
+
+    it('resolves null when nothing matches', async () => {
+      const pick = await provider.spinFiltered({
+        filters: { genres: ['polka'] },
+        exclude: empty,
+      });
+      expect(pick).toBeNull();
+    });
+
+    it('deprioritizes a recently seen artist but still returns within the filter', async () => {
+      // Both rock recordings are Radiohead (a1); excluding a1 must still return a
+      // rock song (soft anti-repeat falls back rather than returning null).
+      const pick = await provider.spinFiltered({
+        filters: { genres: ['rock'] },
+        exclude: new Set(['a1']),
+      });
+      expect(pick!.song.genres).toContain('rock');
+    });
   });
 });

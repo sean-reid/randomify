@@ -1,9 +1,18 @@
-import { FACETS, pickFacet, type Rng, type SpinResponse } from '@randomify/shared';
+import {
+  FACETS,
+  hasFilters,
+  pickFacet,
+  type Rng,
+  type SpinFilters,
+  type SpinResponse,
+} from '@randomify/shared';
 import type { CorpusProvider } from './corpus.js';
 
 export interface SpinOptions {
   /** Artist ids seen recently in the session, to avoid immediate repeats. */
   excludeArtistIds?: ReadonlySet<string>;
+  /** Optional strict filters; when any is set, the spin takes the filtered path. */
+  filters?: SpinFilters;
   /** Override the RNG (used in tests for determinism). */
   rng?: Rng;
 }
@@ -22,9 +31,18 @@ const ANTI_REPEAT_ATTEMPTS = 8;
 export async function handleSpin(
   corpus: CorpusProvider,
   options: SpinOptions = {},
-): Promise<SpinResponse> {
+): Promise<SpinResponse | null> {
   const rng = options.rng ?? Math.random;
   const exclude = options.excludeArtistIds ?? new Set<string>();
+
+  // Filtered path: a strict draw over the matching set. Empty is a legitimate
+  // result (null), not a reason to fall through to another facet, so this does
+  // not enter the facet loop below.
+  if (hasFilters(options.filters)) {
+    const pick = await corpus.spinFiltered({ filters: options.filters!, exclude });
+    return pick ? { song: pick.song, links: pick.links } : null;
+  }
+
   // No exclusions means a single artist draw suffices; only spend extra draws
   // when there is a recent artist to avoid.
   const artistDrawCount = exclude.size > 0 ? ANTI_REPEAT_ATTEMPTS : 1;

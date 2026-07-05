@@ -49,8 +49,11 @@ export type Facet = 'genre' | 'decade' | 'country' | 'language';
 export interface SpinResponse {
   song: Song;
   links: PlatformLink[];
-  /** Which facet drove this spin (useful for transparency and debugging). */
-  facet: Facet;
+  /**
+   * Which facet drove an unfiltered spin (transparency/debugging). Absent for a
+   * filtered spin, which is driven by the user's filters rather than one facet.
+   */
+  facet?: Facet;
 }
 
 /**
