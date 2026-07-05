@@ -1,5 +1,6 @@
 <script lang="ts">
   import { fetchFacets, searchArtists } from '$lib/api';
+  import { countryName, formatDecade, languageName } from '$lib/labels';
   import {
     hasFilters,
     type ArtistHit,
@@ -9,21 +10,29 @@
     type SpinFilters,
   } from '@randomify/shared';
 
+  /** Below this, the artist query stays client-side (too short to index well). */
+  const MIN_ARTIST_QUERY = 2;
+
   let { filters, onChange }: { filters: SpinFilters; onChange: (next: SpinFilters) => void } =
     $props();
 
   let open = $state(false);
   let catalog = $state<FacetCatalog>({ genre: [], decade: [], country: [], language: [] });
+  let facetsLoaded = $state(false);
   let openDim = $state<Facet | null>(null);
   let artistQuery = $state('');
   let artistResults = $state<ArtistHit[]>([]);
+  let artistSearched = $state(false);
   // Remember names of artists chosen this session so chips read as names, not ids.
   let artistNames = $state<Record<string, string>>({});
 
+  // Country is intentionally omitted for v1: the corpus stores raw MusicBrainz
+  // area names at mixed granularity (cities and regions mixed with countries),
+  // so it is not a clean facet yet. The API still accepts it; only the picker
+  // hides it. genre/decade/language are clean.
   const dims: { facet: Facet; key: keyof SpinFilters; label: string }[] = [
     { facet: 'genre', key: 'genres', label: 'Genre' },
     { facet: 'decade', key: 'decades', label: 'Decade' },
-    { facet: 'country', key: 'countries', label: 'Country' },
     { facet: 'language', key: 'languages', label: 'Language' },
   ];
 
@@ -43,9 +52,12 @@
     return filters.languages ?? [];
   }
 
-  /** How a facet value is shown (decades get the trailing "s"). */
+  /** How a facet value is shown: friendly names for decade/country/language. */
   function label(facet: Facet, value: string): string {
-    return facet === 'decade' ? `${value}s` : value;
+    if (facet === 'decade') return formatDecade(value);
+    if (facet === 'country') return countryName(value);
+    if (facet === 'language') return languageName(value);
+    return value;
   }
 
   /** Refetch available values whenever the active filters change (drill-down). */
@@ -55,7 +67,10 @@
     let cancelled = false;
     void fetchFacets(active)
       .then((c) => {
-        if (!cancelled) catalog = c;
+        if (!cancelled) {
+          catalog = c;
+          facetsLoaded = true;
+        }
       })
       .catch(() => {});
     return () => {
@@ -63,19 +78,24 @@
     };
   });
 
-  /** Debounced artist typeahead, filter-aware so only matching artists show. */
+  /** Debounced artist typeahead, filter-aware so only matching artists show.
+   * Short queries stay client-side (they can't use the trgm index well). */
   $effect(() => {
     const q = artistQuery.trim();
     const active = filters;
-    if (!q) {
+    if (q.length < MIN_ARTIST_QUERY) {
       artistResults = [];
+      artistSearched = false;
       return;
     }
     let cancelled = false;
     const timer = setTimeout(() => {
       void searchArtists(q, active)
         .then((hits) => {
-          if (!cancelled) artistResults = hits;
+          if (!cancelled) {
+            artistResults = hits;
+            artistSearched = true;
+          }
         })
         .catch(() => {});
     }, 200);
@@ -127,16 +147,24 @@
     openDim = null;
   }
 
-  /** Every active filter as a flat list of removable chips. */
+  /** Every active filter as a flat list of removable chips (friendly labels). */
   const chips = $derived([
     ...(filters.genres ?? []).map((v) => ({ facet: 'genre' as const, value: v, text: v })),
     ...(filters.decades ?? []).map((v) => ({
       facet: 'decade' as const,
       value: String(v),
-      text: `${v}s`,
+      text: formatDecade(String(v)),
     })),
-    ...(filters.countries ?? []).map((v) => ({ facet: 'country' as const, value: v, text: v })),
-    ...(filters.languages ?? []).map((v) => ({ facet: 'language' as const, value: v, text: v })),
+    ...(filters.countries ?? []).map((v) => ({
+      facet: 'country' as const,
+      value: v,
+      text: countryName(v),
+    })),
+    ...(filters.languages ?? []).map((v) => ({
+      facet: 'language' as const,
+      value: v,
+      text: languageName(v),
+    })),
     ...(filters.artistIds ?? []).map((id) => ({
       facet: 'artist' as const,
       value: id,
@@ -170,10 +198,13 @@
     <ul class="chips" data-testid="filter-chips">
       {#each chips as chip (chip.facet + chip.value)}
         <li>
-          <button class="chip" onclick={() => removeChip(chip.facet, chip.value)}>
+          <button
+            class="chip"
+            aria-label={`Remove ${chip.text} filter`}
+            onclick={() => removeChip(chip.facet, chip.value)}
+          >
             {chip.text}
             <span aria-hidden="true">×</span>
-            <span class="sr-only">remove filter</span>
           </button>
         </li>
       {/each}
@@ -184,7 +215,7 @@
     <div class="panel" data-testid="filter-panel">
       <div class="dims">
         {#each dims as dim (dim.facet)}
-          <div class="dim">
+          <div class="dim" class:open={openDim === dim.facet}>
             <button
               class="dim-toggle"
               aria-expanded={openDim === dim.facet}
@@ -200,14 +231,19 @@
                 {#each valuesFor(dim.facet) as v (v.value)}
                   {@const on = selectedOf(dim.facet).includes(v.value)}
                   <li>
-                    <button class="value" class:on onclick={() => toggleValue(dim.facet, v.value)}>
+                    <button
+                      class="value"
+                      class:on
+                      aria-pressed={on}
+                      onclick={() => toggleValue(dim.facet, v.value)}
+                    >
                       <span>{label(dim.facet, v.value)}</span>
                       {#if v.count > 0}<span class="count">{v.count}</span>{/if}
                     </button>
                   </li>
                 {/each}
                 {#if valuesFor(dim.facet).length === 0}
-                  <li class="none">No options</li>
+                  <li class="none">{facetsLoaded ? 'No options' : 'Loading…'}</li>
                 {/if}
               </ul>
             {/if}
@@ -231,7 +267,12 @@
               </li>
             {/each}
           </ul>
+        {:else if artistSearched}
+          <p class="none">No artists found</p>
         {/if}
+        <p class="sr-only" role="status">
+          {artistSearched ? `${artistResults.length} artists found` : ''}
+        </p>
       </div>
     </div>
   {/if}
@@ -322,6 +363,33 @@
   }
   .dim {
     flex: 1 1 auto;
+  }
+  /* An open dimension takes the full panel width so its value list is not
+     cramped into a half-width column. */
+  .dim.open {
+    flex-basis: 100%;
+  }
+
+  /* Match the app's focus ring on every control for keyboard parity. */
+  .toggle:focus-visible,
+  .clear:focus-visible,
+  .chip:focus-visible,
+  .dim-toggle:focus-visible,
+  .value:focus-visible {
+    outline: 2px solid var(--ink);
+    outline-offset: 1px;
+  }
+
+  /* Comfortable touch targets on coarse pointers (the value rows sit in a
+     scroll list where mistaps are easy). */
+  @media (pointer: coarse) {
+    .toggle,
+    .clear,
+    .chip,
+    .dim-toggle,
+    .value {
+      min-height: 44px;
+    }
   }
   .dim-toggle {
     appearance: none;

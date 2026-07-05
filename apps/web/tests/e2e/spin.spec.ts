@@ -177,6 +177,39 @@ test('filtering by genre updates the URL, shows a chip, and refetches filtered',
   await expect.poll(() => spinUrls.some((u) => u.includes('genres=rock'))).toBe(true);
 });
 
+test('multi-select ORs within a dimension and ANDs across dimensions', async ({ page }) => {
+  await page.route('**/facets*', (route) => route.fulfill({ json: SAMPLE_FACETS }));
+  const spinUrls: string[] = [];
+  await page.route('**/spin*', async (route) => {
+    spinUrls.push(decodeURIComponent(route.request().url()));
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(SAMPLE_SPIN),
+    });
+  });
+
+  await page.goto('/');
+  await expect(page.getByTestId('title')).toBeVisible();
+  await page.getByTestId('filter-toggle').click();
+
+  await page.getByRole('button', { name: /^Genre/ }).click();
+  await page.locator('[data-testid="values-genre"] button', { hasText: 'rock' }).first().click();
+  await page.locator('[data-testid="values-genre"] button', { hasText: 'jazz' }).first().click();
+
+  await page.getByRole('button', { name: /^Decade/ }).click();
+  await page.locator('[data-testid="values-decade"] button', { hasText: '1980s' }).first().click();
+
+  // Two genres OR'd in one dimension, ANDed with a decade; all in the URL + chips.
+  await expect(page).toHaveURL(/genres=rock(%2C|,)jazz/);
+  await expect(page).toHaveURL(/decades=1980/);
+  await expect(page.getByTestId('filter-chips')).toContainText('jazz');
+  await expect(page.getByTestId('filter-chips')).toContainText('1980s');
+  await expect
+    .poll(() => spinUrls.some((u) => u.includes('genres=rock,jazz') && u.includes('decades=1980')))
+    .toBe(true);
+});
+
 test('shows a no-match prompt when a filter matches nothing', async ({ page }) => {
   await page.route('**/facets*', (route) => route.fulfill({ json: SAMPLE_FACETS }));
   await page.route('**/spin*', async (route) => {
