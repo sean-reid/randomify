@@ -60,4 +60,15 @@ describe('parseFilters', () => {
       decades: [1980],
     });
   });
+
+  it('drops out-of-range decades (guards pg int4 and noise)', () => {
+    expect(parseFilters(get({ decades: '2147483648,1700,3000,1980' }))).toEqual({
+      decades: [1980],
+    });
+  });
+
+  it('caps values per dimension', () => {
+    const many = Array.from({ length: 200 }, (_, i) => `g${i}`).join(',');
+    expect(parseFilters(get({ genres: many })).genres).toHaveLength(50);
+  });
 });

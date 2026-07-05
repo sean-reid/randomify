@@ -13,8 +13,12 @@ import {
 } from '@randomify/shared';
 import type { CorpusProvider, FilteredSpinInput, SpinInput, SpinPick } from './corpus.js';
 
-/** Hide facet values with fewer than this many songs (tuned after the reload). */
+/** Hide facet values with fewer than this many songs. Currently 1 (a no-op);
+ * raised after the prod reload once real distribution is known. */
 const MIN_FACET_COUNT = 1;
+
+/** Hard cap on values returned per facet dimension (bounds payload + render). */
+const MAX_FACET_VALUES = 300;
 
 /** The enumerable facet dimensions, in the order the pickers present them. */
 const DIMENSIONS: readonly Facet[] = ['genre', 'decade', 'country', 'language'];
@@ -150,29 +154,10 @@ JOIN release_group rg ON rg.id = r.release_group_id
 `;
 
 /**
- * One strict filtered spin. The prefix-sum walk cannot be filtered (removing rows
- * corrupts its cumulative weights), so this draws over sample_recording instead:
- * a weighted key `-ln(random()) / weight` (Efraimidis-Spirakis) picks one row in
- * proportion to weight over whatever subset the predicates leave, in a single
- * pass. Each predicate is skipped when its param is empty, so any combination of
- * filters shares one statement. Values within a dimension are OR'd (ANY / array
- * overlap); dimensions are AND'd. Recently-seen artists sort last but remain a
- * fallback, so a tiny match set never returns null just from anti-repeat.
- *
- * $1 genres  $2 decades  $3 countries  $4 languages  $5 artist ids  $6 exclude
- * (all comma-joined strings, per the string_to_array note on SPIN_SQL).
+ * Hydrate the display row + links for a recording chosen by the `picked` CTE.
+ * Shared by the filtered draw so the projection matches the unfiltered walk.
  */
-const SPIN_FILTERED_SQL = `
-WITH picked AS (
-  SELECT recording_id FROM sample_recording s
-  WHERE ($1 = '' OR s.genres && string_to_array($1, ','))
-    AND ($2 = '' OR s.decade = ANY(string_to_array(NULLIF($2, ''), ',')::int[]))
-    AND ($3 = '' OR s.country = ANY(string_to_array(NULLIF($3, ''), ',')))
-    AND ($4 = '' OR s.language = ANY(string_to_array(NULLIF($4, ''), ',')))
-    AND ($5 = '' OR s.artist_id = ANY(string_to_array(NULLIF($5, ''), ',')))
-  ORDER BY (s.artist_id = ANY(string_to_array(NULLIF($6, ''), ','))), -ln(random()) / s.weight
-  LIMIT 1
-)
+const HYDRATE_FROM_PICKED = `
 SELECT r.id, r.title, r.artist_id, a.name AS artist, r.release_group_id,
        rg.title AS release_title, r.year, r.isrc, r.duration_ms,
        r.cover_art_url, r.preview_url, r.genres,
@@ -215,24 +200,31 @@ export class PostgresCorpusProvider implements CorpusProvider {
   }
 
   async facets(filters: SpinFilters): Promise<FacetCatalog> {
+    // The dimensions are independent, so fetch them concurrently (one Hyperdrive
+    // round trip of wall-clock instead of four). A dimension with no OTHER active
+    // filter is read from the materialized catalog rather than a live aggregate.
+    const entries = await Promise.all(
+      DIMENSIONS.map(
+        async (dim) =>
+          [
+            dim,
+            otherFiltersActive(filters, dim)
+              ? await this.liveFacetValues(dim, filters)
+              : await this.catalogFacetValues(dim),
+          ] as const,
+      ),
+    );
     const catalog: FacetCatalog = { genre: [], decade: [], country: [], language: [] };
-    for (const dim of DIMENSIONS) {
-      // A dimension with no OTHER active filter has its full catalog available,
-      // served from the materialized table instead of a full-corpus aggregate.
-      catalog[dim] = otherFiltersActive(filters, dim)
-        ? await this.liveFacetValues(dim, filters)
-        : await this.catalogFacetValues(dim);
-    }
+    for (const [dim, values] of entries) catalog[dim] = values;
     return catalog;
   }
 
   /** Full facet catalog for one dimension, read from the materialized table. */
   private async catalogFacetValues(dim: Facet): Promise<FacetValue[]> {
     const order = dim === 'decade' ? 'value::int' : 'cnt DESC, value';
-    const limit = dim === 'genre' ? 'LIMIT 200' : '';
     const { rows } = await this.client.query(
       `SELECT value, count AS cnt FROM facet_catalog
-       WHERE dimension = $1 AND count >= $2 ORDER BY ${order} ${limit}`,
+       WHERE dimension = $1 AND count >= $2 ORDER BY ${order} LIMIT ${MAX_FACET_VALUES}`,
       [dim, MIN_FACET_COUNT],
     );
     return rows.map((r) => ({ value: String(r.value), count: Number(r.cnt) }));
@@ -247,14 +239,14 @@ export class PostgresCorpusProvider implements CorpusProvider {
       query = `SELECT g AS value, count(*)::int AS cnt
                FROM sample_recording s, unnest(s.genres) g
                ${sql}
-               GROUP BY g HAVING count(*) >= ${n} ORDER BY cnt DESC, g LIMIT 200`;
+               GROUP BY g HAVING count(*) >= ${n} ORDER BY cnt DESC, g LIMIT ${MAX_FACET_VALUES}`;
     } else {
       const where = sql ? `${sql} AND s.${dim} IS NOT NULL` : `WHERE s.${dim} IS NOT NULL`;
       const order = dim === 'decade' ? 'value' : 'cnt DESC, value';
       query = `SELECT s.${dim} AS value, count(*)::int AS cnt
                FROM sample_recording s
                ${where}
-               GROUP BY s.${dim} HAVING count(*) >= ${n} ORDER BY ${order}`;
+               GROUP BY s.${dim} HAVING count(*) >= ${n} ORDER BY ${order} LIMIT ${MAX_FACET_VALUES}`;
     }
     const { rows } = await this.client.query(query, [...params, MIN_FACET_COUNT]);
     return rows.map((r) => ({ value: String(r.value), count: Number(r.cnt) }));
@@ -281,16 +273,28 @@ export class PostgresCorpusProvider implements CorpusProvider {
     return rows.map((r) => ({ id: String(r.id), name: String(r.name) }));
   }
 
+  /**
+   * Draw one recording matching the filters, weighted by the Efraimidis-Spirakis
+   * key `-ln(random()) / weight` (exact weighted sampling over any subset in one
+   * pass). The predicates come from the shared buildFilterPredicates, so the
+   * filtered draw and the facet counts can never diverge; only active dimensions
+   * add clauses, which keeps the GIN/btree indexes usable. Recently-seen artists
+   * sort last but stay a fallback, so a tiny match set never returns null purely
+   * from anti-repeat. Only called when filters are active (see handleSpin).
+   */
   async spinFiltered(input: FilteredSpinInput): Promise<SpinPick | null> {
-    const f = input.filters;
-    const { rows } = await this.client.query(SPIN_FILTERED_SQL, [
-      (f.genres ?? []).join(','),
-      (f.decades ?? []).join(','),
-      (f.countries ?? []).join(','),
-      (f.languages ?? []).join(','),
-      (f.artistIds ?? []).join(','),
-      [...input.exclude].join(','),
-    ]);
+    const { sql, params } = buildFilterPredicates(input.filters);
+    const excl = `$${params.length + 1}`;
+    const query = `
+      WITH picked AS (
+        SELECT recording_id FROM sample_recording s
+        ${sql}
+        ORDER BY (s.artist_id = ANY(string_to_array(NULLIF(${excl}, ''), ','))),
+                 -ln(random()) / s.weight
+        LIMIT 1
+      )
+      ${HYDRATE_FROM_PICKED}`;
+    const { rows } = await this.client.query(query, [...params, [...input.exclude].join(',')]);
     const row = rows[0];
     if (!row) return null;
     return { song: toSong(row), links: toLinks(row.links) };

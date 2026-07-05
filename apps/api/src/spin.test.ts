@@ -126,3 +126,27 @@ describe('handleSpin', () => {
     expect(none).toBeNull();
   });
 });
+
+describe('DemoCorpusProvider facets and artist search', () => {
+  const corpus = new DemoCorpusProvider();
+
+  it('drills down: other dimensions narrow to the active filter', async () => {
+    const all = await corpus.facets({});
+    expect(all.genre.some((g) => g.value === 'jazz')).toBe(true);
+    // Under country=BR only Jobim remains, so genre collapses to his tags.
+    const br = await corpus.facets({ countries: ['BR'] });
+    expect(br.genre.map((g) => g.value).sort()).toEqual(['bossa nova', 'jazz']);
+    // A dimension is not collapsed by its own selection.
+    expect(br.country.length).toBeGreaterThan(1);
+    // Decade is the integer-as-string form, matching the Postgres facet output.
+    expect(all.decade.every((d) => /^\d+$/.test(d.value))).toBe(true);
+  });
+
+  it('artist search is filter-aware and ignores the artist filter itself', async () => {
+    expect((await corpus.searchArtists('miles', {})).map((h) => h.id)).toEqual(['demo-art-miles']);
+    // Under a rock filter, a jazz artist does not surface.
+    expect(await corpus.searchArtists('miles', { genres: ['rock'] })).toEqual([]);
+    // Blank query returns nothing.
+    expect(await corpus.searchArtists('  ', {})).toEqual([]);
+  });
+});

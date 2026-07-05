@@ -223,11 +223,8 @@ const DEMO_SONGS: DemoSong[] = [
   },
 ];
 
-function decadeOf(year: number): string {
-  return `${Math.floor(year / 10) * 10}s`;
-}
-
-/** The values a song contributes to a dimension (genre is multi-valued). */
+/** The values a song contributes to a dimension (genre is multi-valued). Decade
+ * is the integer-as-string form ("1980"), matching the Postgres facet output. */
 function dimValues(song: DemoSong, dim: Facet): string[] {
   switch (dim) {
     case 'genre':
@@ -268,20 +265,6 @@ function matchesFilters(song: DemoSong, filters: SpinFilters, skip?: Facet): boo
     return false;
   if (filters.artistIds?.length && !filters.artistIds.includes(song.artistId)) return false;
   return true;
-}
-
-/** The facet values a song belongs to, for the chosen facet. */
-function facetValuesOf(song: DemoSong, facet: Facet): string[] {
-  switch (facet) {
-    case 'genre':
-      return song.genres;
-    case 'decade':
-      return [decadeOf(song.year)];
-    case 'country':
-      return [song.country];
-    case 'language':
-      return [song.language];
-  }
 }
 
 function tally(values: Iterable<string>): Weighted<string>[] {
@@ -389,7 +372,7 @@ export class DemoCorpusProvider implements CorpusProvider {
   }
 
   private pickFacetValue(facet: Facet, r: number): string | null {
-    return pick(tally(DEMO_SONGS.flatMap((s) => facetValuesOf(s, facet))), r);
+    return pick(tally(DEMO_SONGS.flatMap((s) => dimValues(s, facet))), r);
   }
 
   /** Walk each artist draw; prefer the first landing on a non-excluded artist,
@@ -400,7 +383,7 @@ export class DemoCorpusProvider implements CorpusProvider {
     draws: number[],
     exclude: ReadonlySet<string>,
   ): string | null {
-    const inFacet = DEMO_SONGS.filter((s) => facetValuesOf(s, facet).includes(facetValue));
+    const inFacet = DEMO_SONGS.filter((s) => dimValues(s, facet).includes(facetValue));
     const candidates = weightedByKey(inFacet, (s) => s.artistId);
     let chosen: string | null = null;
     for (const r of draws) {
