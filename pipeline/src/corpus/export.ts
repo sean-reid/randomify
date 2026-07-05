@@ -2,6 +2,7 @@ import type { LinkKind, PlatformId } from '@randomify/shared';
 import { bulkUpsert, toPgArray, type BulkColumn } from './bulk.js';
 import { CORPUS_TABLES, SCHEMA_SQL } from './schema.js';
 import type { CorpusWeights } from './weights.js';
+import type { FacetCatalogRow, SampleRecordingRow } from './sample.js';
 
 /** Minimal Postgres client surface, satisfied by node-postgres and PGlite. */
 export interface SqlClient {
@@ -75,6 +76,8 @@ export interface CorpusData {
   recordings: CorpusRecording[];
   links: CorpusLink[];
   weights: CorpusWeights;
+  sampleRecordings: SampleRecordingRow[];
+  facetCatalog: FacetCatalogRow[];
 }
 
 /**
@@ -182,7 +185,55 @@ export async function exportCorpus(client: SqlClient, data: CorpusData): Promise
       data.links.map((l) => [l.recordingId, l.platform, l.url, l.kind, l.confidence]),
     );
     await insertWeights(tx, data.weights);
+    await insertSampleRecordings(tx, data.sampleRecordings);
+    await insertFacetCatalog(tx, data.facetCatalog);
   });
+}
+
+/** Insert the denormalized filtered-sampling index. */
+export async function insertSampleRecordings(
+  client: SqlClient,
+  rows: readonly SampleRecordingRow[],
+): Promise<void> {
+  await insertRows(
+    client,
+    'sample_recording',
+    [
+      { name: 'recording_id', type: 'text' },
+      { name: 'artist_id', type: 'text' },
+      { name: 'weight', type: 'double precision' },
+      { name: 'decade', type: 'int' },
+      { name: 'country', type: 'text' },
+      { name: 'language', type: 'text' },
+      { name: 'genres', type: 'text', cast: 'text[]' },
+    ],
+    rows.map((r) => [
+      r.recordingId,
+      r.artistId,
+      r.weight,
+      r.decade,
+      r.country,
+      r.language,
+      toPgArray(r.genres),
+    ]),
+  );
+}
+
+/** Insert the materialized unfiltered facet catalog. */
+export async function insertFacetCatalog(
+  client: SqlClient,
+  rows: readonly FacetCatalogRow[],
+): Promise<void> {
+  await insertRows(
+    client,
+    'facet_catalog',
+    [
+      { name: 'dimension', type: 'text' },
+      { name: 'value', type: 'text' },
+      { name: 'count', type: 'int' },
+    ],
+    rows.map((r) => [r.dimension, r.value, r.count]),
+  );
 }
 
 /** Insert the four tempered prefix-sum weight index tables. */

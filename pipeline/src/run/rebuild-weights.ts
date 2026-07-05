@@ -1,8 +1,17 @@
-import { applySchema, insertWeights, withTransaction, type SqlClient } from '../corpus/export.js';
+import {
+  applySchema,
+  insertFacetCatalog,
+  insertSampleRecordings,
+  insertWeights,
+  withTransaction,
+  type SqlClient,
+} from '../corpus/export.js';
 import { buildWeights, type StreamableRecording } from '../corpus/weights.js';
+import { backfill } from '../corpus/backfill.js';
+import { buildFacetCatalog, buildSampleRows } from '../corpus/sample.js';
 
-function decadeOf(year: number | null): string | null {
-  return year == null ? null : `${Math.floor(year / 10) * 10}s`;
+function decadeOf(year: number | null): number | null {
+  return year == null ? null : Math.floor(year / 10) * 10;
 }
 
 /**
@@ -30,12 +39,16 @@ export async function rebuildWeights(client: SqlClient): Promise<{ recordings: n
   }));
 
   const weights = buildWeights(streamable);
+  const sampleRecordings = buildSampleRows(backfill(streamable));
+  const facetCatalog = buildFacetCatalog(sampleRecordings);
 
   await withTransaction(client, async (tx) => {
     await tx.query(
-      'TRUNCATE facet_value, facet_artist, artist_release_group, release_group_recording',
+      'TRUNCATE facet_value, facet_artist, artist_release_group, release_group_recording, sample_recording, facet_catalog',
     );
     await insertWeights(tx, weights);
+    await insertSampleRecordings(tx, sampleRecordings);
+    await insertFacetCatalog(tx, facetCatalog);
   });
 
   return { recordings: streamable.length };

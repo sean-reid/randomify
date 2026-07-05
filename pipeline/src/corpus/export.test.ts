@@ -2,6 +2,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { describe, expect, it } from 'vitest';
 import { applySchema, exportCorpus, type CorpusData } from './export.js';
 import { buildWeights, type StreamableRecording } from './weights.js';
+import { buildFacetCatalog, buildSampleRows } from './sample.js';
 
 const RECORDINGS: StreamableRecording[] = [
   {
@@ -9,7 +10,7 @@ const RECORDINGS: StreamableRecording[] = [
     artistId: 'a1',
     releaseGroupId: 'rg1',
     genres: ['rock'],
-    decade: '1990s',
+    decade: 1990,
     country: 'GB',
     language: 'eng',
   },
@@ -18,7 +19,7 @@ const RECORDINGS: StreamableRecording[] = [
     artistId: 'a1',
     releaseGroupId: 'rg1',
     genres: ['bossa nova', 'jazz'],
-    decade: '1990s',
+    decade: 1990,
     country: 'GB',
     language: 'eng',
   },
@@ -66,6 +67,8 @@ function sampleData(): CorpusData {
       },
     ],
     weights: buildWeights(RECORDINGS),
+    sampleRecordings: buildSampleRows(RECORDINGS),
+    facetCatalog: buildFacetCatalog(buildSampleRows(RECORDINGS)),
   };
 }
 
@@ -82,6 +85,15 @@ describe('exportCorpus against PGlite', () => {
     expect(await count('recording')).toBe(2);
     expect(await count('platform_link')).toBe(1);
     expect(await count('facet_value')).toBeGreaterThan(0);
+    expect(await count('sample_recording')).toBe(2);
+    expect(await count('facet_catalog')).toBeGreaterThan(0);
+
+    // A strict genre filter draws only the matching recording via the Gumbel key.
+    const picked = await db.query<{ recording_id: string }>(
+      `SELECT recording_id FROM sample_recording
+       WHERE genres && ARRAY['jazz'] ORDER BY -ln(random()) / weight LIMIT 1`,
+    );
+    expect(picked.rows[0]!.recording_id).toBe('r2');
 
     // genres round-trip as a text[].
     const rec = await db.query<{ genres: string[] }>(

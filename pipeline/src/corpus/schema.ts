@@ -76,6 +76,38 @@ CREATE TABLE IF NOT EXISTS release_group_recording (
   PRIMARY KEY (release_group_id, recording_id)
 );
 CREATE INDEX IF NOT EXISTS release_group_recording_walk ON release_group_recording (release_group_id, cum_index);
+
+-- Denormalized, recording-level sampling index for strict filtered spins. The
+-- prefix-sum walk above cannot be filtered (removing rows corrupts the cumulative
+-- weights), so a filtered spin instead draws one row here with a weighted key
+-- (see SPIN_FILTERED_SQL). Every filterable attribute lives on one indexed row so
+-- the WHERE matches the returned recording exactly. weight mirrors the
+-- artist/release-group/recording sub-walk to keep the alpha tempering.
+CREATE TABLE IF NOT EXISTS sample_recording (
+  recording_id  TEXT PRIMARY KEY,
+  artist_id     TEXT NOT NULL,
+  weight        DOUBLE PRECISION NOT NULL,
+  decade        SMALLINT,
+  country       TEXT,
+  language      TEXT,
+  genres        TEXT[] NOT NULL DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS sample_recording_genres ON sample_recording USING gin (genres);
+CREATE INDEX IF NOT EXISTS sample_recording_decade ON sample_recording (decade);
+CREATE INDEX IF NOT EXISTS sample_recording_country ON sample_recording (country);
+CREATE INDEX IF NOT EXISTS sample_recording_language ON sample_recording (language);
+CREATE INDEX IF NOT EXISTS sample_recording_artist ON sample_recording (artist_id);
+
+-- The full, unfiltered facet catalog (every value and its total song count),
+-- materialized at build time so the no-filter /facets call is a cheap table read
+-- instead of a full-corpus GROUP BY. Filtered /facets calls aggregate the smaller
+-- matched set live.
+CREATE TABLE IF NOT EXISTS facet_catalog (
+  dimension  TEXT NOT NULL,
+  value      TEXT NOT NULL,
+  count      INTEGER NOT NULL,
+  PRIMARY KEY (dimension, value)
+);
 `;
 
 /** Serving tables, in an order safe to TRUNCATE together. */
@@ -88,4 +120,6 @@ export const CORPUS_TABLES = [
   'facet_artist',
   'artist_release_group',
   'release_group_recording',
+  'sample_recording',
+  'facet_catalog',
 ] as const;

@@ -6,7 +6,8 @@ export interface StreamableRecording {
   artistId: string;
   releaseGroupId: string;
   genres: string[];
-  decade: string | null;
+  /** Release-group decade as an integer, e.g. 1980; null when the year is unknown. */
+  decade: number | null;
   country: string | null;
   language: string | null;
 }
@@ -54,7 +55,7 @@ function facetIdsFor(recording: StreamableRecording, facet: Facet): string[] {
     case 'genre':
       return recording.genres;
     case 'decade':
-      return recording.decade ? [recording.decade] : [];
+      return recording.decade == null ? [] : [String(recording.decade)];
     case 'country':
       return recording.country ? [recording.country] : [];
     case 'language':

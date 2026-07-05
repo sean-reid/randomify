@@ -2,6 +2,8 @@ export * from './stages.js';
 export * from './ingest/ingest.js';
 export * from './ingest/musicbrainz.js';
 export * from './corpus/weights.js';
+export * from './corpus/sample.js';
+export * from './corpus/backfill.js';
 export * from './corpus/schema.js';
 export * from './corpus/export.js';
 export * from './corpus/upsert.js';

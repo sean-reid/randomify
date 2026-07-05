@@ -1,5 +1,7 @@
 import { PGlite } from '@electric-sql/pglite';
 import {
+  buildFacetCatalog,
+  buildSampleRows,
   buildWeights,
   exportCorpus,
   type CorpusData,
@@ -85,7 +87,7 @@ const SEEDS: Seed[] = [
   },
 ];
 
-const decade = (year: number): string => `${Math.floor(year / 10) * 10}s`;
+const decade = (year: number): number => Math.floor(year / 10) * 10;
 
 function corpusData(seeds: Seed[] = SEEDS): CorpusData {
   const streamable: StreamableRecording[] = seeds.map((s) => ({
@@ -132,6 +134,8 @@ function corpusData(seeds: Seed[] = SEEDS): CorpusData {
       confidence: 1,
     })),
     weights: buildWeights(streamable),
+    sampleRecordings: buildSampleRows(streamable),
+    facetCatalog: buildFacetCatalog(buildSampleRows(streamable)),
   };
 }
 
