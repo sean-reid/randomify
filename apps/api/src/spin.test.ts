@@ -75,6 +75,7 @@ describe('handleSpin', () => {
     const decadeOnly: CorpusProvider = {
       ping: () => Promise.resolve(),
       spinFiltered: () => Promise.resolve(null),
+      facets: () => Promise.resolve({ genre: [], decade: [], country: [], language: [] }),
       spin: (input) =>
         Promise.resolve(
           input.facet === 'decade'

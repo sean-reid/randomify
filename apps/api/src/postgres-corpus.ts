@@ -1,12 +1,63 @@
 import {
   PLATFORM_BY_ID,
   shouldShowLink,
+  type Facet,
+  type FacetCatalog,
+  type FacetValue,
   type LinkKind,
   type PlatformId,
   type PlatformLink,
   type Song,
+  type SpinFilters,
 } from '@randomify/shared';
 import type { CorpusProvider, FilteredSpinInput, SpinInput, SpinPick } from './corpus.js';
+
+/** Hide facet values with fewer than this many songs (tuned after the reload). */
+const MIN_FACET_COUNT = 1;
+
+/** The enumerable facet dimensions, in the order the pickers present them. */
+const DIMENSIONS: readonly Facet[] = ['genre', 'decade', 'country', 'language'];
+
+/**
+ * Build the AND-of-dimensions WHERE clause for a filtered aggregate/draw over
+ * sample_recording, skipping `exclude` (the dimension whose own options are being
+ * listed, so they do not collapse to the current selection). Values within a
+ * dimension are OR'd. All values are bound params, so this is injection-safe; the
+ * only interpolated identifiers are the fixed column names.
+ */
+function buildFilterPredicates(
+  filters: SpinFilters,
+  exclude?: Facet,
+): { sql: string; params: string[] } {
+  const clauses: string[] = [];
+  const params: string[] = [];
+  const add = (value: string, clause: (placeholder: string) => string): void => {
+    params.push(value);
+    clauses.push(clause(`$${params.length}`));
+  };
+  if (exclude !== 'genre' && filters.genres?.length)
+    add(filters.genres.join(','), (p) => `s.genres && string_to_array(${p}, ',')`);
+  if (exclude !== 'decade' && filters.decades?.length)
+    add(filters.decades.join(','), (p) => `s.decade = ANY(string_to_array(${p}, ',')::int[])`);
+  if (exclude !== 'country' && filters.countries?.length)
+    add(filters.countries.join(','), (p) => `s.country = ANY(string_to_array(${p}, ','))`);
+  if (exclude !== 'language' && filters.languages?.length)
+    add(filters.languages.join(','), (p) => `s.language = ANY(string_to_array(${p}, ','))`);
+  if (filters.artistIds?.length)
+    add(filters.artistIds.join(','), (p) => `s.artist_id = ANY(string_to_array(${p}, ','))`);
+  return { sql: clauses.length ? `WHERE ${clauses.join(' AND ')}` : '', params };
+}
+
+/** True when any filter constrains a dimension other than `dim` (artist counts). */
+function otherFiltersActive(f: SpinFilters, dim: Facet): boolean {
+  return Boolean(
+    (dim !== 'genre' && f.genres?.length) ||
+    (dim !== 'decade' && f.decades?.length) ||
+    (dim !== 'country' && f.countries?.length) ||
+    (dim !== 'language' && f.languages?.length) ||
+    f.artistIds?.length,
+  );
+}
 
 /** Minimal Postgres client surface, satisfied by postgres.js and PGlite. */
 export interface SqlClient {
@@ -160,6 +211,52 @@ export class PostgresCorpusProvider implements CorpusProvider {
     const row = rows[0];
     if (!row) return null;
     return { song: toSong(row), links: toLinks(row.links) };
+  }
+
+  async facets(filters: SpinFilters): Promise<FacetCatalog> {
+    const catalog: FacetCatalog = { genre: [], decade: [], country: [], language: [] };
+    for (const dim of DIMENSIONS) {
+      // A dimension with no OTHER active filter has its full catalog available,
+      // served from the materialized table instead of a full-corpus aggregate.
+      catalog[dim] = otherFiltersActive(filters, dim)
+        ? await this.liveFacetValues(dim, filters)
+        : await this.catalogFacetValues(dim);
+    }
+    return catalog;
+  }
+
+  /** Full facet catalog for one dimension, read from the materialized table. */
+  private async catalogFacetValues(dim: Facet): Promise<FacetValue[]> {
+    const order = dim === 'decade' ? 'value::int' : 'cnt DESC, value';
+    const limit = dim === 'genre' ? 'LIMIT 200' : '';
+    const { rows } = await this.client.query(
+      `SELECT value, count AS cnt FROM facet_catalog
+       WHERE dimension = $1 AND count >= $2 ORDER BY ${order} ${limit}`,
+      [dim, MIN_FACET_COUNT],
+    );
+    return rows.map((r) => ({ value: String(r.value), count: Number(r.cnt) }));
+  }
+
+  /** Available values for one dimension over the set matching the other filters. */
+  private async liveFacetValues(dim: Facet, filters: SpinFilters): Promise<FacetValue[]> {
+    const { sql, params } = buildFilterPredicates(filters, dim);
+    const n = `$${params.length + 1}`;
+    let query: string;
+    if (dim === 'genre') {
+      query = `SELECT g AS value, count(*)::int AS cnt
+               FROM sample_recording s, unnest(s.genres) g
+               ${sql}
+               GROUP BY g HAVING count(*) >= ${n} ORDER BY cnt DESC, g LIMIT 200`;
+    } else {
+      const where = sql ? `${sql} AND s.${dim} IS NOT NULL` : `WHERE s.${dim} IS NOT NULL`;
+      const order = dim === 'decade' ? 'value' : 'cnt DESC, value';
+      query = `SELECT s.${dim} AS value, count(*)::int AS cnt
+               FROM sample_recording s
+               ${where}
+               GROUP BY s.${dim} HAVING count(*) >= ${n} ORDER BY ${order}`;
+    }
+    const { rows } = await this.client.query(query, [...params, MIN_FACET_COUNT]);
+    return rows.map((r) => ({ value: String(r.value), count: Number(r.cnt) }));
   }
 
   async spinFiltered(input: FilteredSpinInput): Promise<SpinPick | null> {

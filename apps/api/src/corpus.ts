@@ -1,4 +1,4 @@
-import type { Facet, PlatformLink, Song, SpinFilters } from '@randomify/shared';
+import type { Facet, FacetCatalog, PlatformLink, Song, SpinFilters } from '@randomify/shared';
 
 /**
  * The uniform draws and anti-repeat state for one spin down the four-level
@@ -57,4 +57,11 @@ export interface CorpusProvider {
   spin(input: SpinInput): Promise<SpinPick | null>;
   /** Strict filtered spin. Resolves null when no recording matches the filters. */
   spinFiltered(input: FilteredSpinInput): Promise<SpinPick | null>;
+  /**
+   * Available values per enumerable facet for the filter pickers. Each
+   * dimension is counted over the set matching all the OTHER active filters
+   * (drill-down), so applying one filter narrows the others' options. Values
+   * below the minimum count are omitted.
+   */
+  facets(filters: SpinFilters): Promise<FacetCatalog>;
 }

@@ -183,6 +183,24 @@ export default {
       }
     }
 
+    if (url.pathname === '/facets') {
+      if (request.method !== 'GET') return json({ error: 'method not allowed' }, 405);
+      const t0 = Date.now();
+      const filters = parseFilters((key) => url.searchParams.get(key));
+      const corpus = getCorpus(env);
+      try {
+        const catalog = await corpus.provider.facets(filters);
+        emit(env, 'facets', 200, hasFilters(filters) ? 'ok_filtered' : 'ok', Date.now() - t0);
+        return json(catalog);
+      } catch (err) {
+        console.error('facets failed', err);
+        emit(env, 'facets', 503, 'corpus_unavailable', Date.now() - t0);
+        return json({ error: 'corpus unavailable' }, 503);
+      } finally {
+        ctx.waitUntil(corpus.close().catch(() => {}));
+      }
+    }
+
     if (url.pathname.startsWith('/preview/')) {
       if (request.method !== 'GET') return json({ error: 'method not allowed' }, 405);
       return handlePreview(request, url.pathname.slice('/preview/'.length), ctx, env);

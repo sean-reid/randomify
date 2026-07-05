@@ -5,6 +5,8 @@ import {
   shouldShowLink,
   weightedPick,
   type Facet,
+  type FacetCatalog,
+  type FacetValue,
   type PlatformLink,
   type Song,
   type SpinFilters,
@@ -224,13 +226,45 @@ function decadeOf(year: number): string {
   return `${Math.floor(year / 10) * 10}s`;
 }
 
-/** True when a song satisfies every active filter (values within a dimension OR'd). */
-function matchesFilters(song: DemoSong, filters: SpinFilters): boolean {
-  if (filters.genres?.length && !filters.genres.some((g) => song.genres.includes(g))) return false;
-  if (filters.decades?.length && !filters.decades.includes(Math.floor(song.year / 10) * 10))
+/** The values a song contributes to a dimension (genre is multi-valued). */
+function dimValues(song: DemoSong, dim: Facet): string[] {
+  switch (dim) {
+    case 'genre':
+      return song.genres;
+    case 'decade':
+      return [String(Math.floor(song.year / 10) * 10)];
+    case 'country':
+      return [song.country];
+    case 'language':
+      return [song.language];
+  }
+}
+
+/**
+ * True when a song satisfies every active filter (values within a dimension
+ * OR'd). `skip` omits one dimension, for drill-down facet counting.
+ */
+function matchesFilters(song: DemoSong, filters: SpinFilters, skip?: Facet): boolean {
+  if (
+    skip !== 'genre' &&
+    filters.genres?.length &&
+    !filters.genres.some((g) => song.genres.includes(g))
+  )
     return false;
-  if (filters.countries?.length && !filters.countries.includes(song.country)) return false;
-  if (filters.languages?.length && !filters.languages.includes(song.language)) return false;
+  if (
+    skip !== 'decade' &&
+    filters.decades?.length &&
+    !filters.decades.includes(Math.floor(song.year / 10) * 10)
+  )
+    return false;
+  if (skip !== 'country' && filters.countries?.length && !filters.countries.includes(song.country))
+    return false;
+  if (
+    skip !== 'language' &&
+    filters.languages?.length &&
+    !filters.languages.includes(song.language)
+  )
+    return false;
   if (filters.artistIds?.length && !filters.artistIds.includes(song.artistId)) return false;
   return true;
 }
@@ -304,6 +338,30 @@ export class DemoCorpusProvider implements CorpusProvider {
     const pool = preferred.length ? preferred : matches;
     const chosen = pool[Math.floor(Math.random() * pool.length)]!;
     return Promise.resolve({ song: this.toSong(chosen), links: this.toLinks(chosen) });
+  }
+
+  /** Facet values with counts, each dimension counted over the set matching the
+   * other active filters (drill-down), mirroring the Postgres provider. */
+  facets(filters: SpinFilters): Promise<FacetCatalog> {
+    const forDim = (dim: Facet): FacetValue[] => {
+      const base = DEMO_SONGS.filter((s) => matchesFilters(s, filters, dim));
+      const counts = new Map<string, number>();
+      for (const s of base)
+        for (const v of dimValues(s, dim)) counts.set(v, (counts.get(v) ?? 0) + 1);
+      const values = [...counts].map(([value, count]) => ({ value, count }));
+      values.sort((a, b) =>
+        dim === 'decade'
+          ? Number(a.value) - Number(b.value)
+          : b.count - a.count || (a.value < b.value ? -1 : 1),
+      );
+      return values;
+    };
+    return Promise.resolve({
+      genre: forDim('genre'),
+      decade: forDim('decade'),
+      country: forDim('country'),
+      language: forDim('language'),
+    });
   }
 
   private pickFacetValue(facet: Facet, r: number): string | null {
