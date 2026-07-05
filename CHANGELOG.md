@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.6.0](https://github.com/sean-reid/randomify/compare/v0.5.0...v0.6.0) (2026-07-05)
+
+
+### Features
+
+* **api:** /facets endpoint with dynamic drill-down ([#85](https://github.com/sean-reid/randomify/issues/85)) ([ace42b5](https://github.com/sean-reid/randomify/commit/ace42b5fe73526692d3ad2f867b5991fa4cb2472))
+* **api:** filter-aware artist typeahead ([#86](https://github.com/sean-reid/randomify/issues/86)) ([23a5e4d](https://github.com/sean-reid/randomify/commit/23a5e4d3f35c61f9fd053a8d88335411f05abf30))
+* **api:** strict filtered spin over the sampling index ([#84](https://github.com/sean-reid/randomify/issues/84)) ([2a66190](https://github.com/sean-reid/randomify/commit/2a66190203271df046287c3280f7b5136d300ed7))
+* **pipeline:** recording-level sampling index for strict filters ([#82](https://github.com/sean-reid/randomify/issues/82)) ([3008d61](https://github.com/sean-reid/randomify/commit/3008d618a80c2d94f9a6b17809b4c81f46131e27))
+* **shared:** filter types and query-string codec ([#83](https://github.com/sean-reid/randomify/issues/83)) ([b7de535](https://github.com/sean-reid/randomify/commit/b7de535e1be718f428dcec0826db1616a905e87e))
+* **web:** filter bar for genre, decade, country, language, artist ([#88](https://github.com/sean-reid/randomify/issues/88)) ([736cd1b](https://github.com/sean-reid/randomify/commit/736cd1b5778b650121ccc6ddde89b3a65ef3f960))
+* **web:** thread filters through the spin flow and URL ([#87](https://github.com/sean-reid/randomify/issues/87)) ([44701f6](https://github.com/sean-reid/randomify/commit/44701f666da0fb9a631c0530f860a3b313d64e65))
+
+
+### Bug Fixes
+
+* **api:** harden and de-duplicate the filter path (audit) ([#89](https://github.com/sean-reid/randomify/issues/89)) ([b6523ad](https://github.com/sean-reid/randomify/commit/b6523adf22592e24f73387cf247c9a9b292ee31b))
+* **web:** filter UX and accessibility fixes (audit) ([#90](https://github.com/sean-reid/randomify/issues/90)) ([81b6094](https://github.com/sean-reid/randomify/commit/81b60945439b859c4261fb577b7e89dce90709ae))
+
 ## [0.5.0](https://github.com/sean-reid/randomify/compare/v0.4.0...v0.5.0) (2026-07-02)
 
 
