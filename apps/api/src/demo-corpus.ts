@@ -4,6 +4,7 @@ import {
   searchLink,
   shouldShowLink,
   weightedPick,
+  type ArtistHit,
   type Facet,
   type FacetCatalog,
   type FacetValue,
@@ -362,6 +363,29 @@ export class DemoCorpusProvider implements CorpusProvider {
       country: forDim('country'),
       language: forDim('language'),
     });
+  }
+
+  /** Artist typeahead: artists with a song matching the other filters, whose name
+   * contains the query, ranked prefix-first. */
+  searchArtists(query: string, filters: SpinFilters): Promise<ArtistHit[]> {
+    const q = query.trim().toLowerCase();
+    if (!q) return Promise.resolve([]);
+    const { artistIds: _ignored, ...others } = filters;
+    const eligible = new Map<string, string>();
+    for (const s of DEMO_SONGS) {
+      if (matchesFilters(s, others)) eligible.set(s.artistId, s.artist);
+    }
+    const hits = [...eligible]
+      .map(([id, name]) => ({ id, name }))
+      .filter((a) => a.name.toLowerCase().includes(q))
+      .sort((a, b) => {
+        const rank = (n: string): number => (n.toLowerCase().startsWith(q) ? 0 : 1);
+        return (
+          rank(a.name) - rank(b.name) || a.name.length - b.name.length || (a.name < b.name ? -1 : 1)
+        );
+      })
+      .slice(0, 20);
+    return Promise.resolve(hits);
   }
 
   private pickFacetValue(facet: Facet, r: number): string | null {

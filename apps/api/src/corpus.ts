@@ -1,4 +1,11 @@
-import type { Facet, FacetCatalog, PlatformLink, Song, SpinFilters } from '@randomify/shared';
+import type {
+  ArtistHit,
+  Facet,
+  FacetCatalog,
+  PlatformLink,
+  Song,
+  SpinFilters,
+} from '@randomify/shared';
 
 /**
  * The uniform draws and anti-repeat state for one spin down the four-level
@@ -64,4 +71,11 @@ export interface CorpusProvider {
    * below the minimum count are omitted.
    */
   facets(filters: SpinFilters): Promise<FacetCatalog>;
+  /**
+   * Artist typeahead for the multi-artist filter. `query` is a name fragment;
+   * results are limited and ranked prefix-first. Only artists with a streamable
+   * recording matching the other active filters are returned, so a picked artist
+   * cannot produce an empty combo.
+   */
+  searchArtists(query: string, filters: SpinFilters): Promise<ArtistHit[]>;
 }

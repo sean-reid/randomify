@@ -90,6 +90,17 @@ const SCHEMA_MIGRATIONS = [
   'ALTER TABLE recording ADD COLUMN IF NOT EXISTS preview_url TEXT',
 ];
 
+/**
+ * Best-effort accelerators that some engines lack. The artist typeahead uses a
+ * case-insensitive substring ILIKE; a pg_trgm GIN index makes it fast in
+ * production (Neon), but PGlite has no pg_trgm, and the query is still correct
+ * without the index (just a scan). So these are applied but tolerated to fail.
+ */
+const OPTIONAL_INDEXES = [
+  'CREATE EXTENSION IF NOT EXISTS pg_trgm',
+  'CREATE INDEX IF NOT EXISTS artist_name_trgm ON artist USING gin (name gin_trgm_ops)',
+];
+
 /** Create the corpus tables if they do not exist, then apply column migrations.
  * Runs each statement separately so it works on clients that reject
  * multi-statement queries. */
@@ -99,6 +110,13 @@ export async function applySchema(client: SqlClient): Promise<void> {
     .filter(Boolean);
   for (const statement of statements) await client.query(statement);
   for (const migration of SCHEMA_MIGRATIONS) await client.query(migration);
+  for (const stmt of OPTIONAL_INDEXES) {
+    try {
+      await client.query(stmt);
+    } catch {
+      // pg_trgm not available (e.g. PGlite); the ILIKE search still works unindexed.
+    }
+  }
 }
 
 /** Bulk INSERT into a freshly-truncated table via array-bound `unnest`. */

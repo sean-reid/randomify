@@ -322,4 +322,30 @@ describe('PostgresCorpusProvider', () => {
       expect(values(catalog.country)).toEqual(['BR']);
     });
   });
+
+  describe('searchArtists', () => {
+    it('matches a name fragment case-insensitively', async () => {
+      const hits = await provider.searchArtists('radio', {});
+      expect(hits.map((h) => h.name)).toEqual(['Radiohead']);
+      expect(hits[0]!.id).toBe('a1');
+    });
+
+    it('returns nothing for a blank query', async () => {
+      expect(await provider.searchArtists('   ', {})).toEqual([]);
+    });
+
+    it('is filter-aware: only artists with a match under the other filters', async () => {
+      // Every seeded artist's name contains "a"; only Jobim (a2) has a jazz track.
+      const all = await provider.searchArtists('a', {});
+      expect(all.length).toBeGreaterThan(1);
+      const jazz = await provider.searchArtists('a', { genres: ['jazz'] });
+      expect(jazz.map((h) => h.id)).toEqual(['a2']);
+    });
+
+    it('ignores the artist filter when searching (adding more artists)', async () => {
+      // A selected artist must not hide other eligible artists from the typeahead.
+      const hits = await provider.searchArtists('radio', { artistIds: ['a3'] });
+      expect(hits.map((h) => h.id)).toEqual(['a1']);
+    });
+  });
 });

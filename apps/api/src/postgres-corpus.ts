@@ -1,6 +1,7 @@
 import {
   PLATFORM_BY_ID,
   shouldShowLink,
+  type ArtistHit,
   type Facet,
   type FacetCatalog,
   type FacetValue,
@@ -27,7 +28,7 @@ const DIMENSIONS: readonly Facet[] = ['genre', 'decade', 'country', 'language'];
  */
 function buildFilterPredicates(
   filters: SpinFilters,
-  exclude?: Facet,
+  opts: { skip?: Facet; skipArtist?: boolean } = {},
 ): { sql: string; params: string[] } {
   const clauses: string[] = [];
   const params: string[] = [];
@@ -35,15 +36,15 @@ function buildFilterPredicates(
     params.push(value);
     clauses.push(clause(`$${params.length}`));
   };
-  if (exclude !== 'genre' && filters.genres?.length)
+  if (opts.skip !== 'genre' && filters.genres?.length)
     add(filters.genres.join(','), (p) => `s.genres && string_to_array(${p}, ',')`);
-  if (exclude !== 'decade' && filters.decades?.length)
+  if (opts.skip !== 'decade' && filters.decades?.length)
     add(filters.decades.join(','), (p) => `s.decade = ANY(string_to_array(${p}, ',')::int[])`);
-  if (exclude !== 'country' && filters.countries?.length)
+  if (opts.skip !== 'country' && filters.countries?.length)
     add(filters.countries.join(','), (p) => `s.country = ANY(string_to_array(${p}, ','))`);
-  if (exclude !== 'language' && filters.languages?.length)
+  if (opts.skip !== 'language' && filters.languages?.length)
     add(filters.languages.join(','), (p) => `s.language = ANY(string_to_array(${p}, ','))`);
-  if (filters.artistIds?.length)
+  if (!opts.skipArtist && filters.artistIds?.length)
     add(filters.artistIds.join(','), (p) => `s.artist_id = ANY(string_to_array(${p}, ','))`);
   return { sql: clauses.length ? `WHERE ${clauses.join(' AND ')}` : '', params };
 }
@@ -239,7 +240,7 @@ export class PostgresCorpusProvider implements CorpusProvider {
 
   /** Available values for one dimension over the set matching the other filters. */
   private async liveFacetValues(dim: Facet, filters: SpinFilters): Promise<FacetValue[]> {
-    const { sql, params } = buildFilterPredicates(filters, dim);
+    const { sql, params } = buildFilterPredicates(filters, { skip: dim });
     const n = `$${params.length + 1}`;
     let query: string;
     if (dim === 'genre') {
@@ -257,6 +258,27 @@ export class PostgresCorpusProvider implements CorpusProvider {
     }
     const { rows } = await this.client.query(query, [...params, MIN_FACET_COUNT]);
     return rows.map((r) => ({ value: String(r.value), count: Number(r.cnt) }));
+  }
+
+  async searchArtists(query: string, filters: SpinFilters): Promise<ArtistHit[]> {
+    const q = query.trim();
+    if (!q) return [];
+    // Escape LIKE wildcards so a typed % or _ is matched literally.
+    const term = q.replace(/[\\%_]/g, (c) => `\\${c}`);
+    // Only artists with a streamable recording matching the other filters, so a
+    // picked artist can never yield an empty combo. Artist selections are ignored
+    // here (the user is adding artists, and artist is OR within its dimension).
+    const { sql: pred, params } = buildFilterPredicates(filters, { skipArtist: true });
+    const existsFilter = pred ? pred.replace(/^WHERE /, 'AND ') : '';
+    const p = `$${params.length + 1}`;
+    const sql = `
+      SELECT a.id, a.name FROM artist a
+      WHERE EXISTS (SELECT 1 FROM sample_recording s WHERE s.artist_id = a.id ${existsFilter})
+        AND (a.name ILIKE ${p} || '%' OR a.name ILIKE '%' || ${p} || '%')
+      ORDER BY (a.name ILIKE ${p} || '%') DESC, char_length(a.name), a.name
+      LIMIT 20`;
+    const { rows } = await this.client.query(sql, [...params, term]);
+    return rows.map((r) => ({ id: String(r.id), name: String(r.name) }));
   }
 
   async spinFiltered(input: FilteredSpinInput): Promise<SpinPick | null> {

@@ -76,6 +76,7 @@ describe('handleSpin', () => {
       ping: () => Promise.resolve(),
       spinFiltered: () => Promise.resolve(null),
       facets: () => Promise.resolve({ genre: [], decade: [], country: [], language: [] }),
+      searchArtists: () => Promise.resolve([]),
       spin: (input) =>
         Promise.resolve(
           input.facet === 'decade'
