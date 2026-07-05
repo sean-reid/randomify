@@ -3,6 +3,16 @@ import type { SpinFilters } from './types.js';
 /** Values within a dimension are joined with this in the query string. */
 const DELIM = ',';
 
+/**
+ * Cap values per dimension so a hand-crafted URL cannot force a giant IN-list /
+ * array-overlap into the query (cost amplification). Well above any real UI use.
+ */
+const MAX_VALUES_PER_DIM = 50;
+
+/** Plausible release-decade bounds; also keeps decade ints inside pg int4. */
+const MIN_DECADE = 1860;
+const MAX_DECADE = 2100;
+
 /** True when at least one dimension constrains the spin. */
 export function hasFilters(filters: SpinFilters | null | undefined): boolean {
   if (!filters) return false;
@@ -42,7 +52,8 @@ export function parseFilters(get: (key: string) => string | null): SpinFilters {
     return raw
       .split(DELIM)
       .map((value) => value.trim())
-      .filter(Boolean);
+      .filter(Boolean)
+      .slice(0, MAX_VALUES_PER_DIM);
   };
 
   const filters: SpinFilters = {};
@@ -50,7 +61,7 @@ export function parseFilters(get: (key: string) => string | null): SpinFilters {
   if (genres.length) filters.genres = genres;
   const decades = list('decades')
     .map(Number)
-    .filter((n) => Number.isInteger(n));
+    .filter((n) => Number.isInteger(n) && n >= MIN_DECADE && n <= MAX_DECADE);
   if (decades.length) filters.decades = decades;
   const countries = list('countries');
   if (countries.length) filters.countries = countries;

@@ -8,12 +8,7 @@ import type {
   CorpusReleaseGroup,
 } from '../corpus/export.js';
 import { buildWeights, type StreamableRecording } from '../corpus/weights.js';
-import { backfill } from '../corpus/backfill.js';
-import { buildFacetCatalog, buildSampleRows } from '../corpus/sample.js';
-
-function decadeOf(year: number | null): number | null {
-  return year == null ? null : Math.floor(year / 10) * 10;
-}
+import { buildDerivedTables, decadeOf } from '../corpus/sample.js';
 
 /** Deezer track id from a deezer.com/track/{id} link, for the preview proxy. */
 function deezerTrackId(url: string): string | null {
@@ -116,19 +111,14 @@ export function buildCorpusData(
     });
   }
 
-  // The unfiltered walk keeps the original (sparse) facets, unchanged. Backfill
-  // applies only to the strict-filter index, where coverage matters and a
-  // coarser artist-level genre/language is acceptable.
-  const backfilled = backfill(streamable);
-  const sampleRecordings = buildSampleRows(backfilled);
-
+  // The unfiltered walk keeps the original (sparse) facets, so weights are built
+  // from the raw streamable set; the strict-filter tables use the backfilled set.
   return {
     artists: [...artists.values()],
     releaseGroups: [...releaseGroups.values()],
     recordings: recordingRows,
     links,
     weights: buildWeights(streamable),
-    sampleRecordings,
-    facetCatalog: buildFacetCatalog(sampleRecordings),
+    ...buildDerivedTables(streamable),
   };
 }

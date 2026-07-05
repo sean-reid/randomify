@@ -204,7 +204,7 @@ export default {
     if (url.pathname === '/artists') {
       if (request.method !== 'GET') return json({ error: 'method not allowed' }, 405);
       const t0 = Date.now();
-      const query = url.searchParams.get('q') ?? '';
+      const query = (url.searchParams.get('q') ?? '').slice(0, 100);
       const filters = parseFilters((key) => url.searchParams.get(key));
       const corpus = getCorpus(env);
       try {

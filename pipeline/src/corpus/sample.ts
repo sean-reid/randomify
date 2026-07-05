@@ -1,11 +1,17 @@
 import { DEFAULT_ALPHA, temperedWeight, type Facet } from '@randomify/shared';
 import type { StreamableRecording } from './weights.js';
+import { backfill } from './backfill.js';
+
+/** Release-group year to its integer decade (e.g. 1987 -> 1980); null if unknown. */
+export function decadeOf(year: number | null): number | null {
+  return year == null ? null : Math.floor(year / 10) * 10;
+}
 
 /** One row of the denormalized filtered-sampling index (`sample_recording`). */
 export interface SampleRecordingRow {
   recordingId: string;
   artistId: string;
-  /** Filter-independent draw weight (see below); used by the Gumbel-key spin. */
+  /** Filter-independent draw weight (see below); used by the weighted filtered spin. */
   weight: number;
   decade: number | null;
   country: string | null;
@@ -104,4 +110,20 @@ export function buildFacetCatalog(rows: readonly SampleRecordingRow[]): FacetCat
     for (const [value, count] of values) catalog.push({ dimension, value, count });
   }
   return catalog;
+}
+
+/**
+ * Build the strict-filter serving tables from the streamable set: backfill sparse
+ * facets, then derive the per-recording sample rows and the unfiltered facet
+ * catalog. The one place both corpus entry points (build-corpus, rebuild-weights)
+ * assemble these, so the backfill-then-sample sequence cannot drift between them.
+ * The unfiltered prefix-sum walk deliberately keeps the original (un-backfilled)
+ * facets, so weights are still built from the raw streamable set, not here.
+ */
+export function buildDerivedTables(recordings: readonly StreamableRecording[]): {
+  sampleRecordings: SampleRecordingRow[];
+  facetCatalog: FacetCatalogRow[];
+} {
+  const sampleRecordings = buildSampleRows(backfill(recordings));
+  return { sampleRecordings, facetCatalog: buildFacetCatalog(sampleRecordings) };
 }

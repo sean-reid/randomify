@@ -7,12 +7,7 @@ import {
   type SqlClient,
 } from '../corpus/export.js';
 import { buildWeights, type StreamableRecording } from '../corpus/weights.js';
-import { backfill } from '../corpus/backfill.js';
-import { buildFacetCatalog, buildSampleRows } from '../corpus/sample.js';
-
-function decadeOf(year: number | null): number | null {
-  return year == null ? null : Math.floor(year / 10) * 10;
-}
+import { buildDerivedTables, decadeOf } from '../corpus/sample.js';
 
 /**
  * Recompute the tempered prefix-sum weight index from the current streamable
@@ -39,8 +34,7 @@ export async function rebuildWeights(client: SqlClient): Promise<{ recordings: n
   }));
 
   const weights = buildWeights(streamable);
-  const sampleRecordings = buildSampleRows(backfill(streamable));
-  const facetCatalog = buildFacetCatalog(sampleRecordings);
+  const { sampleRecordings, facetCatalog } = buildDerivedTables(streamable);
 
   await withTransaction(client, async (tx) => {
     await tx.query(
