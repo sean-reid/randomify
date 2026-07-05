@@ -30,6 +30,9 @@
   const filters = $derived(parseFilters((key) => page.url.searchParams.get(key)));
   const filterKey = $derived(JSON.stringify(filters));
   let lastFilterKey: string | undefined;
+  // Monotonic id so a superseded discover (filters changed mid-flight) can detect
+  // it is stale and neither commit its song nor clear the loading flag.
+  let runToken = 0;
   let playing = $state(false);
   let playerError = $state(false);
   let audioEl = $state<HTMLAudioElement>();
@@ -174,8 +177,14 @@
    * candidate whose preview won't play is skipped before it is ever shown (no
    * flash, no entry in history), trying a few more before giving up.
    */
-  async function discover(): Promise<void> {
-    if (loading) return;
+  async function discover(restart = false): Promise<void> {
+    // A restart (filter change) supersedes an in-flight discover rather than
+    // bailing on the loading guard; a normal shuffle still no-ops while loading.
+    if (loading && !restart) return;
+    const token = ++runToken;
+    // If a resolved request belongs to a superseded run (e.g. filters changed
+    // mid-flight), drop it instead of committing a stale, wrong-filter song.
+    const stale = (): boolean => token !== runToken;
     loading = true;
     error = null;
     noMatch = false;
@@ -183,6 +192,7 @@
       let result: SpinResponse | null = null;
       for (let attempt = 0; attempt < 6 && !result; attempt += 1) {
         const candidate = await (prefetched ?? spin(recent, filters));
+        if (stale()) return;
         prefetched = null;
         // A null candidate means the active filters match nothing: a legitimate
         // empty result, so stop retrying and prompt to loosen filters.
@@ -198,6 +208,7 @@
           url ? isPreviewLive(url) : Promise.resolve(false),
           loadCover(candidate.song.coverArtUrl),
         ]);
+        if (stale()) return;
         if (playable) {
           result = candidate;
         } else {
@@ -218,9 +229,11 @@
       prefetched = warm;
       void warm.then((r) => r && loadCover(r.song.coverArtUrl));
     } catch (e) {
-      error = e instanceof Error ? e.message : 'Something went wrong.';
+      if (!stale()) error = e instanceof Error ? e.message : 'Something went wrong.';
     } finally {
-      loading = false;
+      // Only the current run owns the loading flag; a superseded run leaves it set
+      // for the run that replaced it.
+      if (!stale()) loading = false;
     }
   }
 
@@ -231,12 +244,17 @@
     history = [];
     index = -1;
     prefetched = null;
-    void discover();
+    void discover(true);
   }
 
-  /** Clear all filters (used from the no-match prompt), which restarts discovery. */
+  /** Clear all filters (used from the no-match prompt), which restarts discovery.
+   * The prompt (and its button) is about to unmount, so move focus somewhere
+   * stable instead of losing it to the body. */
   function clearFilters(): void {
     void goto(page.url.pathname, { keepFocus: true, noScroll: true });
+    if (typeof document !== 'undefined') {
+      (document.querySelector('[data-testid="shuffle"]') as HTMLElement | null)?.focus();
+    }
   }
 
   /** Write the filter set into the URL; the filter effect then re-discovers. */
@@ -306,10 +324,11 @@
     const target = event.target as HTMLElement | null;
     if (target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable)
       return;
+    // When a control (a filter button, chip, or player control) is focused, let
+    // its native behavior handle the key: Space/Enter activate it, and arrows are
+    // for moving within the controls, not shuffling the song out from under them.
+    if (target?.tagName === 'BUTTON') return;
     if (event.code === 'Space') {
-      // If a control button is focused, let its native activation handle Space
-      // (avoids a double toggle from this window handler + the button click).
-      if (target?.tagName === 'BUTTON') return;
       event.preventDefault();
       unlockAudio();
       togglePlay();
@@ -474,7 +493,7 @@
         </ul>
       </article>
     {:else if noMatch}
-      <div class="notice" data-testid="no-match">
+      <div class="notice" role="status" data-testid="no-match">
         <p>No songs match these filters.</p>
         <button class="linklike" onclick={clearFilters}>Clear filters</button>
       </div>
