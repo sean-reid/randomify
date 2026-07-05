@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { SAMPLE_SPIN } from './fixtures.js';
+import { SAMPLE_FACETS, SAMPLE_SPIN } from './fixtures.js';
 
 test.beforeEach(async ({ page }) => {
   // Stand in for the API so the UI is exercised deterministically.
@@ -148,6 +148,58 @@ test('skips a song whose preview is dead and shows the next playable one', async
 
   await page.goto('/');
   await expect(page.getByTestId('title')).toHaveText('Good Song');
+});
+
+test('filtering by genre updates the URL, shows a chip, and refetches filtered', async ({
+  page,
+}) => {
+  await page.route('**/facets*', (route) => route.fulfill({ json: SAMPLE_FACETS }));
+  const spinUrls: string[] = [];
+  await page.route('**/spin*', async (route) => {
+    spinUrls.push(route.request().url());
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(SAMPLE_SPIN),
+    });
+  });
+
+  await page.goto('/');
+  await expect(page.getByTestId('title')).toBeVisible();
+
+  await page.getByTestId('filter-toggle').click();
+  await page.getByRole('button', { name: /^Genre/ }).click();
+  await page.locator('[data-testid="values-genre"] button', { hasText: 'rock' }).first().click();
+
+  // URL carries the filter (shareable), a chip appears, and a spin ran filtered.
+  await expect(page).toHaveURL(/genres=rock/);
+  await expect(page.getByTestId('filter-chips')).toContainText('rock');
+  await expect.poll(() => spinUrls.some((u) => u.includes('genres=rock'))).toBe(true);
+});
+
+test('shows a no-match prompt when a filter matches nothing', async ({ page }) => {
+  await page.route('**/facets*', (route) => route.fulfill({ json: SAMPLE_FACETS }));
+  await page.route('**/spin*', async (route) => {
+    // A filtered request matches nothing; an unfiltered one returns the sample.
+    const filtered = new URL(route.request().url()).searchParams.has('genres');
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(filtered ? { song: null, links: [] } : SAMPLE_SPIN),
+    });
+  });
+
+  await page.goto('/');
+  await expect(page.getByTestId('title')).toBeVisible();
+
+  await page.getByTestId('filter-toggle').click();
+  await page.getByRole('button', { name: /^Genre/ }).click();
+  await page.locator('[data-testid="values-genre"] button', { hasText: 'rock' }).first().click();
+
+  await expect(page.getByTestId('no-match')).toBeVisible();
+  // Clearing filters recovers a normal (unfiltered) song.
+  await page.getByTestId('filter-clear').click();
+  await expect(page.getByTestId('title')).toBeVisible();
 });
 
 test('browse backward and forward through the deck', async ({ page }) => {

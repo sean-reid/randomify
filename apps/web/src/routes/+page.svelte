@@ -2,9 +2,17 @@
   import { onDestroy } from 'svelte';
   import { page } from '$app/state';
   import { goto } from '$app/navigation';
-  import { parseFilters, PLATFORM_BY_ID, type Song, type SpinResponse } from '@randomify/shared';
+  import {
+    filtersToParams,
+    parseFilters,
+    PLATFORM_BY_ID,
+    type Song,
+    type SpinFilters,
+    type SpinResponse,
+  } from '@randomify/shared';
   import { spin } from '$lib/api';
   import { RecentArtists } from '$lib/recent';
+  import FilterBar from '$lib/FilterBar.svelte';
 
   // A deck of spun songs: you walk back through ones you heard (left) and
   // forward to discover new ones (right). `index` is the current position.
@@ -229,6 +237,12 @@
   /** Clear all filters (used from the no-match prompt), which restarts discovery. */
   function clearFilters(): void {
     void goto(page.url.pathname, { keepFocus: true, noScroll: true });
+  }
+
+  /** Write the filter set into the URL; the filter effect then re-discovers. */
+  function applyFilters(next: SpinFilters): void {
+    const query = new URLSearchParams(filtersToParams(next)).toString();
+    void goto(query ? `?${query}` : page.url.pathname, { keepFocus: true, noScroll: true });
   }
 
   /** Forward in the deck, or discover a fresh song when at the front. */
@@ -495,6 +509,8 @@
     preload="metadata"
     data-testid="player-audio"
   ></audio>
+
+  <FilterBar {filters} onChange={applyFilters} />
 
   <button
     class="shuffle"
