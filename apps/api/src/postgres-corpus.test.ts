@@ -293,4 +293,33 @@ describe('PostgresCorpusProvider', () => {
       expect(pick!.song.genres).toContain('rock');
     });
   });
+
+  describe('facets', () => {
+    const values = (list: { value: string; count: number }[]): string[] => list.map((v) => v.value);
+
+    it('returns the full catalog with counts when unfiltered', async () => {
+      const catalog = await provider.facets({});
+      expect(catalog.genre.find((g) => g.value === 'rock')?.count).toBe(2); // r1, r2
+      expect(values(catalog.decade)).toEqual(['1960', '1970', '1990']); // ascending
+      expect(values(catalog.country).sort()).toEqual(['BR', 'GB', 'US']);
+      expect(catalog.language.find((l) => l.value === 'eng')?.count).toBe(3); // r1, r2, r4
+    });
+
+    it('drills down: other dimensions narrow to the active filter', async () => {
+      const catalog = await provider.facets({ countries: ['GB'] });
+      // Genre/decade/language now reflect only GB songs (Radiohead).
+      expect(values(catalog.genre).sort()).toEqual(['alternative', 'rock']);
+      expect(values(catalog.decade)).toEqual(['1990']);
+      expect(values(catalog.language)).toEqual(['eng']);
+      // The country dimension itself is not collapsed by its own selection.
+      expect(values(catalog.country).sort()).toEqual(['BR', 'GB', 'US']);
+    });
+
+    it('excludes a value that has no songs under the other filters', async () => {
+      const catalog = await provider.facets({ genres: ['jazz'] });
+      // Only Jobim (BR) is jazz, so decade collapses to the 1960s and GB drops.
+      expect(values(catalog.decade)).toEqual(['1960']);
+      expect(values(catalog.country)).toEqual(['BR']);
+    });
+  });
 });
