@@ -201,6 +201,25 @@ export default {
       }
     }
 
+    if (url.pathname === '/artists') {
+      if (request.method !== 'GET') return json({ error: 'method not allowed' }, 405);
+      const t0 = Date.now();
+      const query = url.searchParams.get('q') ?? '';
+      const filters = parseFilters((key) => url.searchParams.get(key));
+      const corpus = getCorpus(env);
+      try {
+        const artists = await corpus.provider.searchArtists(query, filters);
+        emit(env, 'artists', 200, 'ok', Date.now() - t0);
+        return json(artists);
+      } catch (err) {
+        console.error('artists search failed', err);
+        emit(env, 'artists', 503, 'corpus_unavailable', Date.now() - t0);
+        return json({ error: 'corpus unavailable' }, 503);
+      } finally {
+        ctx.waitUntil(corpus.close().catch(() => {}));
+      }
+    }
+
     if (url.pathname.startsWith('/preview/')) {
       if (request.method !== 'GET') return json({ error: 'method not allowed' }, 405);
       return handlePreview(request, url.pathname.slice('/preview/'.length), ctx, env);
