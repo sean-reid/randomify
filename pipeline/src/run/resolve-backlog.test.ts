@@ -92,4 +92,36 @@ describe('resolveBacklog', () => {
     expect(third.processed).toBe(1);
     expect(await count(db, 'recording')).toBe(5);
   });
+
+  it('checkpoints one chunk into sub-batches, marking each and reporting progress', async () => {
+    const db = new PGlite();
+    await populateBacklog(
+      client(db),
+      Array.from({ length: 5 }, (_, i) => rec(`c${i}`, `art${i}`, `ISRC${i}`)),
+    );
+
+    const progress: number[] = [];
+    const summary = await resolveBacklog(client(db), {
+      limit: 10,
+      checkpointSize: 2,
+      resolvers: [exactIfIsrc],
+      cache: new InMemoryResolutionCache(),
+      onCheckpoint: ({ processed }) => {
+        progress.push(processed);
+      },
+    });
+
+    // Five recordings resolved in checkpoints of two: three writes (2, 4, 5).
+    expect(summary.processed).toBe(5);
+    expect(summary.streamable).toBe(5);
+    expect(progress).toEqual([2, 4, 5]);
+    // Metrics are summed across checkpoints, not reported per sub-batch.
+    expect(summary.metrics.deezer?.attempts).toBe(5);
+    expect(summary.metrics.deezer?.exactHits).toBe(5);
+    expect(await count(db, 'recording')).toBe(5);
+
+    // Every checkpoint marked its sub-batch, so a second pass is a no-op.
+    const second = await resolveBacklog(client(db), { limit: 10, resolvers: [exactIfIsrc] });
+    expect(second.processed).toBe(0);
+  });
 });
