@@ -6,6 +6,19 @@ export interface LoadClient extends SqlClient {
   close(): Promise<void>;
 }
 
+export interface LoadClientOptions {
+  /** Max pooled connections (default 4). */
+  max?: number;
+  /**
+   * Close idle connections after this many ms (default: pg's own, ~10s). The
+   * resolver sets this low so the pool drops its connection during the long,
+   * DB-idle Deezer phase between checkpoint writes; with the direct (non-pooler)
+   * endpoint that lets the Neon compute auto-suspend instead of being billed for
+   * hours of waiting. The pool transparently reopens on the next query.
+   */
+  idleTimeoutMillis?: number;
+}
+
 /**
  * Open a pooled Postgres client for a load job. A pool (rather than a single
  * long-lived Client) keeps a multi-hour load resilient: a connection dropped by
@@ -16,8 +29,18 @@ export interface LoadClient extends SqlClient {
  * different connections and corrupt the transaction. `withTransaction` in the
  * corpus layer calls this, so the atomic corpus and weight swaps run pinned.
  */
-export function createLoadClient(connectionString: string, max = 4): LoadClient {
-  const pool = new Pool({ connectionString, max });
+export function createLoadClient(
+  connectionString: string,
+  options: LoadClientOptions = {},
+): LoadClient {
+  const pool = new Pool({
+    connectionString,
+    max: options.max ?? 4,
+    // allowExitOnIdle lets the process exit cleanly once the pool has drained.
+    ...(options.idleTimeoutMillis != null
+      ? { idleTimeoutMillis: options.idleTimeoutMillis, allowExitOnIdle: true }
+      : {}),
+  });
   return {
     query: (sql, params) => pool.query(sql, params).then((r) => ({ rows: r.rows })),
     async transaction(fn) {
