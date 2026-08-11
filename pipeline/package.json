@@ -27,11 +27,11 @@
   "dependencies": {
     "@duckdb/node-api": "1.5.4-r.1",
     "@randomify/shared": "workspace:*",
-    "pg": "^8.22.0"
+    "pg": "^8.23.0"
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.4",
-    "@types/pg": "^8.20.0",
+    "@types/pg": "^8.21.0",
     "vitest": "^4.1.10"
   }
 }
