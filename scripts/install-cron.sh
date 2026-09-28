@@ -5,7 +5,7 @@
 #
 #   scripts/install-cron.sh dev          # the weekly small load
 #   scripts/install-cron.sh staging      # the weekly small load
-#   scripts/install-cron.sh production   # refresh (weekly) + resolve (hourly) + weights (daily)
+#   scripts/install-cron.sh production   # refresh (weekly) + resolve (twice daily) + weights (daily)
 #
 # Production jobs should only be installed once the launch gate (a good initial
 # corpus) is satisfied. See scripts/README.md.
@@ -40,7 +40,8 @@ for label in "${LABELS[@]}"; do
     echo "missing plist: $local_plist" >&2
     exit 1
   fi
-  cp "$local_plist" "$AGENTS/$label.plist"
+  # The templates carry __REPO__ for every path so the jobs follow the checkout.
+  sed "s#__REPO__#$REPO#g" "$local_plist" > "$AGENTS/$label.plist"
   # Replace any existing instance so the latest plist takes effect.
   launchctl bootout "gui/$(id -u)/$label" 2>/dev/null || true
   launchctl bootstrap "gui/$(id -u)" "$AGENTS/$label.plist"

@@ -8,7 +8,7 @@
   <key>ProgramArguments</key>
   <array>
     <string>/bin/bash</string>
-    <string>/Users/seanreid/randomify/scripts/refresh-dump.sh</string>
+    <string>__REPO__/scripts/refresh-dump.sh</string>
     <string>production</string>
   </array>
   <key>StartCalendarInterval</key>
@@ -18,8 +18,8 @@
     <key>Minute</key><integer>0</integer>
   </dict>
   <key>StandardOutPath</key>
-  <string>/Users/seanreid/randomify/data/musicbrainz/logs/prod-refresh.log</string>
+  <string>__REPO__/data/musicbrainz/logs/prod-refresh.log</string>
   <key>StandardErrorPath</key>
-  <string>/Users/seanreid/randomify/data/musicbrainz/logs/prod-refresh.log</string>
+  <string>__REPO__/data/musicbrainz/logs/prod-refresh.log</string>
 </dict>
 </plist>
