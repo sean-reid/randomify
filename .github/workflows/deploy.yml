@@ -1,98 +1,18 @@
 name: Deploy
 
-# Branch-per-environment: pushing an environment branch deploys that
-# environment. Promote with fast-forward merges dev -> staging -> production.
+# Every merge to dev deploys the dev environment. Staging and production deploy
+# from releases (release.yml). The release commit carries no code, so it skips
+# the dev deploy.
 on:
   push:
-    branches: [dev, staging, production]
-
-concurrency:
-  group: deploy-${{ github.ref }}
-  cancel-in-progress: false
+    branches: [dev]
 
 jobs:
   dev:
-    name: Deploy dev
-    if: github.ref == 'refs/heads/dev'
-    runs-on: ubuntu-latest
-    environment: dev
-    env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @randomify/shared build
-      - name: Deploy API Worker (dev)
-        run: pnpm --filter @randomify/api exec wrangler deploy
-      - name: Build web (dev)
-        run: pnpm --filter @randomify/web build
-        env:
-          PUBLIC_RANDOMIFY_API: https://api.dev.randomify.net
-      - name: Deploy web to Pages (dev)
-        run: >-
-          pnpm --filter @randomify/web exec wrangler pages deploy
-          --project-name=randomify-web-dev --branch=production --commit-dirty=true
-
-  staging:
-    name: Deploy staging
-    if: github.ref == 'refs/heads/staging'
-    runs-on: ubuntu-latest
-    environment: staging
-    env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @randomify/shared build
-      - name: Deploy API Worker (staging)
-        run: pnpm --filter @randomify/api exec wrangler deploy --env staging
-      - name: Build web (staging)
-        run: pnpm --filter @randomify/web build
-        env:
-          PUBLIC_RANDOMIFY_API: https://api.staging.randomify.net
-      - name: Deploy web to Pages (staging)
-        run: >-
-          pnpm --filter @randomify/web exec wrangler pages deploy
-          --project-name=randomify-web-staging --branch=production --commit-dirty=true
-
-  production:
-    name: Deploy production
-    if: github.ref == 'refs/heads/production'
-    runs-on: ubuntu-latest
-    # The production environment carries the required-reviewer gate, so this
-    # waits for manual approval before deploying.
-    environment: production
-    env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-    steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @randomify/shared build
-      - name: Deploy API Worker (production)
-        run: pnpm --filter @randomify/api exec wrangler deploy --env production
-      - name: Build web (production)
-        run: pnpm --filter @randomify/web build
-        env:
-          PUBLIC_RANDOMIFY_API: https://api.randomify.net
-      - name: Deploy web to Pages (production)
-        run: >-
-          pnpm --filter @randomify/web exec wrangler pages deploy
-          --project-name=randomify-web --branch=production --commit-dirty=true
+    if: "${{ !startsWith(github.event.head_commit.message, 'chore: release') }}"
+    uses: ./.github/workflows/deploy-env.yml
+    secrets: inherit
+    with:
+      environment: dev
+      api_host: api.dev.randomify.net
+      pages_project: randomify-web-dev
