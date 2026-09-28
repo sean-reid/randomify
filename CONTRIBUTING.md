@@ -1,28 +1,25 @@
 # Contributing
 
-## Branches and environments
+## Branches, deploys, releases
 
-Three long-lived branches map to the three environments:
+`dev` is the only long-lived branch. Feature branches open PRs against it, and
+every merge deploys the dev environment.
 
-- **`dev`** - the default branch. Feature branches open PRs here; merging deploys
-  the dev environment.
-- **`staging`** - promote `dev` here (fast-forward) to deploy staging.
-- **`production`** - promote `staging` here to deploy production (gated on
-  approval).
+release-please watches `dev` and keeps a release PR open that bumps the version
+and writes the changelog from the conventional commits since the last release.
+Merging that PR is the release: the run tags `vX.Y.Z`, publishes the GitHub
+Release, deploys that commit to staging, checks its `/health` reports the same
+commit, then deploys production behind the production environment's approval.
 
-Promote with fast-forward merges so commit history carries through cleanly:
-
-```bash
-git checkout staging && git merge --ff-only dev && git push
-git checkout production && git merge --ff-only staging && git push
-```
+There is nothing to promote by hand. To ship, merge the release PR. To hold
+production back, leave it open.
 
 ## Commits
 
 Use [conventional commits](https://www.conventionalcommits.org) - `feat:`,
 `fix:`, `chore:`, `docs:`, `refactor:`, `test:`, etc. release-please reads them
-to generate the changelog and pick the next semver version when changes reach
-`production`. Use `feat!:` or a `BREAKING CHANGE:` footer for breaking changes.
+to generate the changelog and pick the next semver version. Use `feat!:` or a
+`BREAKING CHANGE:` footer for breaking changes.
 
 ## Before opening a PR
 

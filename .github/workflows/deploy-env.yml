@@ -1,0 +1,74 @@
+name: Deploy environment
+
+# Reusable deploy of one environment: the API Worker, the web Pages project,
+# then a smoke check that the live /health reports the commit just deployed.
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: GitHub environment name (dev, staging, production)
+        required: true
+        type: string
+      wrangler_env:
+        description: wrangler environment; empty means the top-level config
+        required: false
+        type: string
+        default: ''
+      api_host:
+        required: true
+        type: string
+      pages_project:
+        required: true
+        type: string
+
+jobs:
+  deploy:
+    name: Deploy ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    concurrency:
+      group: deploy-${{ inputs.environment }}
+      cancel-in-progress: false
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      WRANGLER_ENV: ${{ inputs.wrangler_env }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @randomify/shared build
+      - name: Deploy API Worker
+        run: >-
+          pnpm --filter @randomify/api exec wrangler deploy
+          ${WRANGLER_ENV:+--env "$WRANGLER_ENV"} --var RELEASE:${{ github.sha }}
+      - name: Build web
+        run: pnpm --filter @randomify/web build
+        env:
+          PUBLIC_RANDOMIFY_API: https://${{ inputs.api_host }}
+      - name: Deploy web to Pages
+        run: >-
+          pnpm --filter @randomify/web exec wrangler pages deploy
+          --project-name=${{ inputs.pages_project }} --branch=production --commit-dirty=true
+      - name: Smoke check the live API
+        env:
+          HEALTH_URL: https://${{ inputs.api_host }}/health
+          EXPECTED: ${{ github.sha }}
+        run: |
+          for attempt in 1 2 3 4 5 6; do
+            body=$(curl -sS --max-time 20 "$HEALTH_URL" || true)
+            status=$(printf '%s' "$body" | jq -r '.status // empty')
+            release=$(printf '%s' "$body" | jq -r '.release // empty')
+            if [ "$status" = ok ] && [ "$release" = "$EXPECTED" ]; then
+              echo "live: $body"
+              exit 0
+            fi
+            echo "attempt $attempt: $body"
+            sleep 10
+          done
+          echo "$HEALTH_URL did not report status ok for release $EXPECTED"
+          exit 1

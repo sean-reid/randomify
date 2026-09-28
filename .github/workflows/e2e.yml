@@ -2,9 +2,9 @@ name: E2E
 
 on:
   push:
-    branches: [dev, staging, production]
+    branches: [dev]
   pull_request:
-    branches: [dev, staging, production]
+    branches: [dev]
 
 concurrency:
   group: e2e-${{ github.ref }}

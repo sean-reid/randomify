@@ -1,10 +1,12 @@
 name: Release
 
-# Cuts releases from the production branch: conventional commits drive the
-# version bump, CHANGELOG, tag, and GitHub Release via a release PR.
+# Conventional commits on dev feed a release PR. Merging it tags the version and
+# publishes the GitHub Release, then this same run deploys that commit to
+# staging, smoke-checks it, and deploys production behind the environment's
+# approval gate.
 on:
   push:
-    branches: [production]
+    branches: [dev]
 
 permissions:
   contents: write
@@ -13,9 +15,33 @@ permissions:
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
       - uses: googleapis/release-please-action@v5
+        id: release
         with:
-          target-branch: production
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+  staging:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    uses: ./.github/workflows/deploy-env.yml
+    secrets: inherit
+    with:
+      environment: staging
+      wrangler_env: staging
+      api_host: api.staging.randomify.net
+      pages_project: randomify-web-staging
+
+  production:
+    needs: staging
+    uses: ./.github/workflows/deploy-env.yml
+    secrets: inherit
+    with:
+      environment: production
+      wrangler_env: production
+      api_host: api.randomify.net
+      pages_project: randomify-web

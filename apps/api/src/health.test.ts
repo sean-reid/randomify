@@ -62,6 +62,11 @@ describe('/health', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
+  it('reports the deployed commit when the deploy injected one', async () => {
+    const { body } = await health({ RELEASE: 'abc1234' });
+    expect(body.release).toBe('abc1234');
+  });
+
   it('never consults Neon for the demo corpus', async () => {
     const fetchSpy = vi.fn();
     vi.stubGlobal('fetch', fetchSpy);

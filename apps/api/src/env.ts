@@ -19,4 +19,6 @@ export interface Env {
   NEON_PROJECT_ID?: string;
   /** Neon compute endpoint id for this environment's branch (a wrangler var). */
   NEON_ENDPOINT_ID?: string;
+  /** Commit deployed, injected by the deploy workflow; absent in local dev. */
+  RELEASE?: string;
 }
