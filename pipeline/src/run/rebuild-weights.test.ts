@@ -139,6 +139,19 @@ describe('rebuildWeights', () => {
     expect(n.rows[0]!.n).toBe(3);
   });
 
+  it('works on a corpus that has never had a weight index', async () => {
+    const db = new PGlite();
+    await upsertCorpus(client(db), corpus);
+    await db.exec(
+      'DROP TABLE facet_value, facet_artist, artist_release_group, release_group_recording, sample_recording, facet_catalog',
+    );
+
+    const summary = await rebuildWeights(client(db));
+    expect(summary.recordings).toBe(3);
+    const n = await db.query<{ n: number }>(`SELECT count(*)::int AS n FROM sample_recording`);
+    expect(n.rows[0]!.n).toBe(3);
+  });
+
   it('is idempotent (re-run replaces, no duplication)', async () => {
     const db = new PGlite();
     await upsertCorpus(client(db), corpus);
