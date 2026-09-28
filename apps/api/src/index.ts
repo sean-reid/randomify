@@ -142,15 +142,16 @@ export default {
       // keep it billed around the clock.
       const t0 = Date.now();
       const corpus = getCorpus(env);
+      const build = env.RELEASE ? { release: env.RELEASE } : {};
       try {
         const compute = corpus.kind === 'postgres' ? await computeState(env) : 'unknown';
         if (compute !== 'idle') await corpus.provider.ping();
-        return json({ status: 'ok', corpus: corpus.kind, compute });
+        return json({ status: 'ok', corpus: corpus.kind, compute, ...build });
       } catch (err) {
         console.error('health check failed', err);
         emit(env, 'health', 503, 'db_unreachable', Date.now() - t0);
         raiseAlert(env, ctx, 'health_db', 'health DB ping failed');
-        return json({ status: 'degraded', corpus: corpus.kind }, 503);
+        return json({ status: 'degraded', corpus: corpus.kind, ...build }, 503);
       } finally {
         ctx.waitUntil(corpus.close().catch(() => {}));
       }
