@@ -7,18 +7,18 @@ corruption.
 
 ## The jobs
 
-| Script                     | What it does                                                   | prod cadence  |
-| -------------------------- | -------------------------------------------------------------- | ------------- |
-| `refresh-dump.sh <env>`    | download latest MB dump → extract → (re)populate the backlog   | weekly        |
-| `resolve.sh <env>`         | resolve a batch of backlog recordings → upsert into the corpus | hourly (prod) |
-| `rebuild-weights.sh <env>` | recompute the tempered prefix-sum weight index                 | daily         |
-| `load-small.sh <env>`      | one-shot: refresh → resolve → weights (for dev/staging)        | weekly        |
+| Script                     | What it does                                                   | prod cadence       |
+| -------------------------- | -------------------------------------------------------------- | ------------------ |
+| `refresh-dump.sh <env>`    | download latest MB dump → extract → (re)populate the backlog   | weekly             |
+| `resolve.sh <env>`         | resolve a batch of backlog recordings → upsert into the corpus | twice daily (prod) |
+| `rebuild-weights.sh <env>` | recompute the tempered prefix-sum weight index                 | daily              |
+| `load-small.sh <env>`      | one-shot: refresh → resolve → weights (for dev/staging)        | weekly             |
 
 **Per-environment corpus size.** `dev`/`staging` set `CANDIDATE_LIMIT=1000` so the
 backlog - and therefore the corpus - can never exceed ~1000 (~877 streamable).
 `production` leaves `CANDIDATE_LIMIT` unset and grows the full ~6M-recording
-catalog incrementally via the hourly resolve. So dev/staging only need the single
-weekly `load-small`; only prod runs the separate hourly/daily jobs.
+catalog incrementally via the resolve job. So dev/staging only need the single
+weekly `load-small`; only prod runs the separate scheduled jobs.
 
 ## Config
 
@@ -39,7 +39,7 @@ One script installs the right jobs for an environment (copies the plists into
 ```sh
 scripts/install-cron.sh dev          # weekly small load
 scripts/install-cron.sh staging      # weekly small load
-scripts/install-cron.sh production   # refresh (weekly) + resolve (hourly) + weights (daily)
+scripts/install-cron.sh production   # refresh (weekly) + resolve (twice daily) + weights (daily)
 
 # run a job once to verify (the installer prints the exact label):
 launchctl kickstart -k gui/$(id -u)/com.randomify.dev-load
@@ -48,6 +48,9 @@ launchctl kickstart -k gui/$(id -u)/com.randomify.dev-load
 `dev` and `staging` each install a single weekly `*-load` job; `production`
 installs the three separate-cadence jobs. Install `production` (and `staging`)
 **only after** the prod launch gate (a good initial corpus) is satisfied.
+
+The installed plists point at this checkout. If the repo moves, run the
+installer again from the new location; until then every job exits 127.
 
 Remove an environment's jobs with `scripts/uninstall-cron.sh <env>`.
 

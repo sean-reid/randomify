@@ -8,7 +8,7 @@
   <key>ProgramArguments</key>
   <array>
     <string>/bin/bash</string>
-    <string>/Users/seanreid/randomify/scripts/load-small.sh</string>
+    <string>__REPO__/scripts/load-small.sh</string>
     <string>staging</string>
   </array>
   <key>StartCalendarInterval</key>
@@ -18,8 +18,8 @@
     <key>Minute</key><integer>45</integer>
   </dict>
   <key>StandardOutPath</key>
-  <string>/Users/seanreid/randomify/data/musicbrainz/logs/staging-load.log</string>
+  <string>__REPO__/data/musicbrainz/logs/staging-load.log</string>
   <key>StandardErrorPath</key>
-  <string>/Users/seanreid/randomify/data/musicbrainz/logs/staging-load.log</string>
+  <string>__REPO__/data/musicbrainz/logs/staging-load.log</string>
 </dict>
 </plist>
