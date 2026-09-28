@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.6.1](https://github.com/sean-reid/randomify/compare/v0.6.0...v0.6.1) (2026-09-28)
+
+
+### Bug Fixes
+
+* **pipeline:** raise heap for the weekly refresh (OOM) ([#92](https://github.com/sean-reid/randomify/issues/92)) ([300fe9d](https://github.com/sean-reid/randomify/commit/300fe9def50568a9e548de629007c8c72af81dec))
+
+
+### Performance Improvements
+
+* **api:** skip the health DB ping while the Neon compute is idle ([#108](https://github.com/sean-reid/randomify/issues/108)) ([a29b878](https://github.com/sean-reid/randomify/commit/a29b878b7a6420752a221b5f2ba4a1a23cd378e4))
+* **pipeline:** decouple resolve drain from Neon compute ([#96](https://github.com/sean-reid/randomify/issues/96)) ([3e002dd](https://github.com/sean-reid/randomify/commit/3e002ddb4ecf5661342e6d4983f85caaba1b1cc5))
+
 ## [0.6.0](https://github.com/sean-reid/randomify/compare/v0.5.0...v0.6.0) (2026-07-05)
 
 
