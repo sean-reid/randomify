@@ -1,5 +1,4 @@
 import {
-  applySchema,
   applyWeightSchema,
   insertFacetCatalog,
   insertSampleRecordings,
@@ -19,11 +18,11 @@ const SWAP_ATTEMPTS = 5;
  * corpus and swap it into place. The new tables are built in a scratch schema
  * where readers never look, then moved into public in one short transaction,
  * so a spin waits milliseconds for the swap instead of minutes for the load.
- * Run on its own (daily) cadence because it is O(corpus).
+ * Nothing here runs DDL against a live table: even a no-op ALTER TABLE on
+ * recording takes an exclusive lock and queues every spin behind it. Run on
+ * its own (daily) cadence because it is O(corpus).
  */
 export async function rebuildWeights(client: SqlClient): Promise<{ recordings: number }> {
-  await applySchema(client);
-
   const { rows } = await client.query(
     `SELECT r.id AS recording_id, r.artist_id, r.release_group_id, r.genres,
             r.year, r.language, a.country
@@ -73,7 +72,9 @@ async function swapIntoPublic(client: SqlClient): Promise<void> {
     try {
       await withTransaction(client, async (tx) => {
         await tx.query(`SET LOCAL lock_timeout = '5s'`);
-        await tx.query(`DROP TABLE ${WEIGHT_TABLES.map((t) => `public.${t}`).join(', ')}`);
+        await tx.query(
+          `DROP TABLE IF EXISTS ${WEIGHT_TABLES.map((t) => `public.${t}`).join(', ')}`,
+        );
         for (const table of WEIGHT_TABLES) {
           await tx.query(`ALTER TABLE ${SCRATCH_SCHEMA}.${table} SET SCHEMA public`);
         }
