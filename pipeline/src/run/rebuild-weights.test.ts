@@ -93,6 +93,52 @@ describe('rebuildWeights', () => {
     for (let i = 1; i < values.length; i++) expect(values[i]!).toBeGreaterThan(values[i - 1]!);
   });
 
+  it('leaves the canonical index names in public and no scratch schema behind', async () => {
+    const db = new PGlite();
+    await upsertCorpus(client(db), corpus);
+    await rebuildWeights(client(db));
+
+    const indexes = await db.query<{ indexname: string }>(
+      `SELECT indexname FROM pg_indexes WHERE schemaname = 'public'
+       AND tablename IN ('facet_value', 'sample_recording') ORDER BY indexname`,
+    );
+    expect(indexes.rows.map((r) => r.indexname)).toEqual([
+      'facet_value_pkey',
+      'facet_value_walk',
+      'sample_recording_artist',
+      'sample_recording_country',
+      'sample_recording_decade',
+      'sample_recording_genres',
+      'sample_recording_language',
+      'sample_recording_pkey',
+    ]);
+
+    const schemas = await db.query<{ n: number }>(
+      `SELECT count(*)::int AS n FROM pg_namespace WHERE nspname = 'weights_next'`,
+    );
+    expect(schemas.rows[0]!.n).toBe(0);
+  });
+
+  it('keeps the previous index readable while the new one is being built', async () => {
+    const db = new PGlite();
+    await upsertCorpus(client(db), corpus);
+    await rebuildWeights(client(db));
+
+    // Fail the build partway through, after the scratch schema exists, and
+    // check the live tables were never touched.
+    const failing: SqlClient = {
+      query: (sql, params) => {
+        if (sql.startsWith('ANALYZE')) throw new Error('boom');
+        return db.query(sql, params);
+      },
+    };
+    await expect(rebuildWeights(failing)).rejects.toThrow('boom');
+    const n = await db.query<{ n: number }>(
+      `SELECT count(*)::int AS n FROM release_group_recording`,
+    );
+    expect(n.rows[0]!.n).toBe(3);
+  });
+
   it('is idempotent (re-run replaces, no duplication)', async () => {
     const db = new PGlite();
     await upsertCorpus(client(db), corpus);

@@ -1,6 +1,6 @@
 import type { LinkKind, PlatformId } from '@randomify/shared';
 import { bulkUpsert, toPgArray, type BulkColumn } from './bulk.js';
-import { CORPUS_TABLES, SCHEMA_SQL } from './schema.js';
+import { CORPUS_TABLES, SCHEMA_SQL, WEIGHT_SCHEMA_SQL } from './schema.js';
 import type { CorpusWeights } from './weights.js';
 import type { FacetCatalogRow, SampleRecordingRow } from './sample.js';
 
@@ -19,8 +19,7 @@ export interface SqlClient {
 /**
  * Run `fn` as a transaction. With a pooled client this pins one connection (so
  * the whole BEGIN..COMMIT runs on it); otherwise it brackets `fn` with inline
- * BEGIN/COMMIT and rolls back on error. The serving corpus stays consistent for
- * readers either way: they see the previous contents until COMMIT.
+ * BEGIN/COMMIT and rolls back on error.
  */
 export async function withTransaction<T>(
   client: SqlClient,
@@ -101,14 +100,24 @@ const OPTIONAL_INDEXES = [
   'CREATE INDEX IF NOT EXISTS artist_name_trgm ON artist USING gin (name gin_trgm_ops)',
 ];
 
-/** Create the corpus tables if they do not exist, then apply column migrations.
- * Runs each statement separately so it works on clients that reject
- * multi-statement queries. */
-export async function applySchema(client: SqlClient): Promise<void> {
-  const statements = SCHEMA_SQL.split(';')
+/** Split a DDL script into statements for clients that reject multi-statement
+ * queries. */
+function statementsOf(sql: string): string[] {
+  return sql
+    .split(';')
     .map((s) => s.trim())
     .filter(Boolean);
-  for (const statement of statements) await client.query(statement);
+}
+
+/** Create the weight index tables in whatever schema is first on the
+ * search_path. */
+export async function applyWeightSchema(client: SqlClient): Promise<void> {
+  for (const statement of statementsOf(WEIGHT_SCHEMA_SQL)) await client.query(statement);
+}
+
+/** Create the corpus tables if they do not exist, then apply column migrations. */
+export async function applySchema(client: SqlClient): Promise<void> {
+  for (const statement of statementsOf(SCHEMA_SQL)) await client.query(statement);
   for (const migration of SCHEMA_MIGRATIONS) await client.query(migration);
   for (const stmt of OPTIONAL_INDEXES) {
     try {
@@ -130,9 +139,9 @@ function insertRows(
 }
 
 /**
- * Rebuild the serving corpus in a single transaction: truncate every table and
- * reload it. Other readers keep seeing the previous corpus until commit (MVCC),
- * so the swap is atomic and never exposes a half-built state.
+ * Rebuild the whole serving corpus in a single transaction: truncate every
+ * table and reload it. TRUNCATE takes an exclusive lock, so readers wait until
+ * the commit; this is for full loads, not the daily weight rebuild.
  */
 export async function exportCorpus(client: SqlClient, data: CorpusData): Promise<void> {
   await applySchema(client);
