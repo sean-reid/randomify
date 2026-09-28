@@ -4,24 +4,21 @@ updates:
     directory: /
     schedule:
       interval: weekly
-    target-branch: dev
     open-pull-requests-limit: 5
     commit-message:
       prefix: chore(deps)
       prefix-development: chore(deps-dev)
+    # One PR a week for every minor and patch bump, so the lockfile is touched
+    # once. Majors fall outside the group and arrive as their own PRs.
     groups:
-      production:
-        dependency-type: production
-        update-types: [minor, patch]
-      development:
-        dependency-type: development
+      npm:
+        patterns: ['*']
         update-types: [minor, patch]
 
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
-    target-branch: dev
     commit-message:
       prefix: ci(deps)
     groups:
