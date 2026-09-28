@@ -7,12 +7,12 @@ corruption.
 
 ## The jobs
 
-| Script                     | What it does                                                   | prod cadence  |
-| -------------------------- | -------------------------------------------------------------- | ------------- |
-| `refresh-dump.sh <env>`    | download latest MB dump → extract → (re)populate the backlog   | weekly        |
+| Script                     | What it does                                                   | prod cadence       |
+| -------------------------- | -------------------------------------------------------------- | ------------------ |
+| `refresh-dump.sh <env>`    | download latest MB dump → extract → (re)populate the backlog   | weekly             |
 | `resolve.sh <env>`         | resolve a batch of backlog recordings → upsert into the corpus | twice daily (prod) |
-| `rebuild-weights.sh <env>` | recompute the tempered prefix-sum weight index                 | daily         |
-| `load-small.sh <env>`      | one-shot: refresh → resolve → weights (for dev/staging)        | weekly        |
+| `rebuild-weights.sh <env>` | recompute the tempered prefix-sum weight index                 | daily              |
+| `load-small.sh <env>`      | one-shot: refresh → resolve → weights (for dev/staging)        | weekly             |
 
 **Per-environment corpus size.** `dev`/`staging` set `CANDIDATE_LIMIT=1000` so the
 backlog - and therefore the corpus - can never exceed ~1000 (~877 streamable).
