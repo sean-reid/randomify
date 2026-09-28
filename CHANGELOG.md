@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.6.2](https://github.com/sean-reid/randomify/compare/v0.6.1...v0.6.2) (2026-09-28)
+
+
+### Bug Fixes
+
+* **pipeline:** keep the weight rebuild off live-table DDL ([#117](https://github.com/sean-reid/randomify/issues/117)) ([a4d30c2](https://github.com/sean-reid/randomify/commit/a4d30c29bfe647b1f78d6a48e37d3d8f89d5255f))
+* **pipeline:** rebuild weights without locking readers out ([#116](https://github.com/sean-reid/randomify/issues/116)) ([c5d50d8](https://github.com/sean-reid/randomify/commit/c5d50d8f77aeac1b863ed920c45f749c5ac39f5f))
+* **scripts:** derive launchd job paths from the checkout ([#114](https://github.com/sean-reid/randomify/issues/114)) ([18287a6](https://github.com/sean-reid/randomify/commit/18287a6092ad76a172952d9891113768256af6bd))
+
 ## [0.6.1](https://github.com/sean-reid/randomify/compare/v0.6.0...v0.6.1) (2026-09-28)
 
 
