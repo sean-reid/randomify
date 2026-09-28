@@ -1,5 +1,6 @@
 import { hasFilters, parseFilters } from '@randomify/shared';
 import { getCorpus } from './corpus-factory.js';
+import { computeState } from './neon.js';
 import { handleSpin } from './spin.js';
 import { resolvePreview, type PreviewOutcome } from './preview.js';
 import type { Env } from './env.js';
@@ -136,11 +137,15 @@ export default {
     if (url.pathname === '/health') {
       // Deep check: confirm the corpus is actually reachable, so an external
       // uptime monitor detects a DB/Hyperdrive outage, not just a live Worker.
+      // An idle Neon compute is skipped rather than woken: the monitor polls
+      // more often than the compute's autosuspend window, so pinging it would
+      // keep it billed around the clock.
       const t0 = Date.now();
       const corpus = getCorpus(env);
       try {
-        await corpus.provider.ping();
-        return json({ status: 'ok', corpus: corpus.kind });
+        const compute = corpus.kind === 'postgres' ? await computeState(env) : 'unknown';
+        if (compute !== 'idle') await corpus.provider.ping();
+        return json({ status: 'ok', corpus: corpus.kind, compute });
       } catch (err) {
         console.error('health check failed', err);
         emit(env, 'health', 503, 'db_unreachable', Date.now() - t0);
