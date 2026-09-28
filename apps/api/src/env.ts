@@ -11,4 +11,12 @@ export interface Env {
   ALERTS?: DurableObjectNamespace;
   /** ntfy topic for failure pushes (a Worker secret); absent = no push. */
   NTFY_TOPIC?: string;
+  /** Neon API key (a Worker secret). With the project and endpoint ids set,
+   * /health checks the compute's state before pinging it, so the monitor never
+   * wakes an idle compute. Absent = always ping. */
+  NEON_API_KEY?: string;
+  /** Neon project id (a Worker secret, set alongside the API key). */
+  NEON_PROJECT_ID?: string;
+  /** Neon compute endpoint id for this environment's branch (a wrangler var). */
+  NEON_ENDPOINT_ID?: string;
 }
