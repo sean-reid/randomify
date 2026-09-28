@@ -1,18 +1,25 @@
 import {
   applySchema,
+  applyWeightSchema,
   insertFacetCatalog,
   insertSampleRecordings,
   insertWeights,
   withTransaction,
   type SqlClient,
 } from '../corpus/export.js';
+import { WEIGHT_TABLES } from '../corpus/schema.js';
 import { buildWeights, type StreamableRecording } from '../corpus/weights.js';
 import { buildDerivedTables, decadeOf } from '../corpus/sample.js';
 
+const SCRATCH_SCHEMA = 'weights_next';
+const SWAP_ATTEMPTS = 5;
+
 /**
  * Recompute the tempered prefix-sum weight index from the current streamable
- * corpus and atomically reload the four weight tables. Run on its own (daily)
- * cadence because it is O(corpus); the hourly resolve job leaves weights alone.
+ * corpus and swap it into place. The new tables are built in a scratch schema
+ * where readers never look, then moved into public in one short transaction,
+ * so a spin waits milliseconds for the swap instead of minutes for the load.
+ * Run on its own (daily) cadence because it is O(corpus).
  */
 export async function rebuildWeights(client: SqlClient): Promise<{ recordings: number }> {
   await applySchema(client);
@@ -36,14 +43,49 @@ export async function rebuildWeights(client: SqlClient): Promise<{ recordings: n
   const weights = buildWeights(streamable);
   const { sampleRecordings, facetCatalog } = buildDerivedTables(streamable);
 
+  await client.query(`DROP SCHEMA IF EXISTS ${SCRATCH_SCHEMA} CASCADE`);
+  await client.query(`CREATE SCHEMA ${SCRATCH_SCHEMA}`);
   await withTransaction(client, async (tx) => {
-    await tx.query(
-      'TRUNCATE facet_value, facet_artist, artist_release_group, release_group_recording, sample_recording, facet_catalog',
-    );
+    await tx.query(`SET LOCAL search_path TO ${SCRATCH_SCHEMA}`);
+    await applyWeightSchema(tx);
     await insertWeights(tx, weights);
     await insertSampleRecordings(tx, sampleRecordings);
     await insertFacetCatalog(tx, facetCatalog);
+    // Planner statistics travel with the table, so the swapped-in copy plans
+    // well from its first query.
+    for (const table of WEIGHT_TABLES) await tx.query(`ANALYZE ${table}`);
   });
 
+  await swapIntoPublic(client);
+  await client.query(`DROP SCHEMA ${SCRATCH_SCHEMA}`);
+
   return { recordings: streamable.length };
+}
+
+/**
+ * Replace the live weight tables with the scratch copies. Index and constraint
+ * names carry over unchanged, so the schema's IF NOT EXISTS DDL stays
+ * idempotent. A long-running read can hold the swap off; rather than queue new
+ * readers behind it, give up after a short wait and retry.
+ */
+async function swapIntoPublic(client: SqlClient): Promise<void> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      await withTransaction(client, async (tx) => {
+        await tx.query(`SET LOCAL lock_timeout = '5s'`);
+        await tx.query(`DROP TABLE ${WEIGHT_TABLES.map((t) => `public.${t}`).join(', ')}`);
+        for (const table of WEIGHT_TABLES) {
+          await tx.query(`ALTER TABLE ${SCRATCH_SCHEMA}.${table} SET SCHEMA public`);
+        }
+      });
+      return;
+    } catch (error) {
+      if (attempt >= SWAP_ATTEMPTS || !isLockTimeout(error)) throw error;
+      console.warn(`weight swap attempt ${attempt} timed out waiting for a lock; retrying`);
+    }
+  }
+}
+
+function isLockTimeout(error: unknown): boolean {
+  return (error as { code?: string }).code === '55P03';
 }

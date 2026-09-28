@@ -4,7 +4,7 @@
  * pipeline rebuilds and swaps the contents atomically (see export.ts), so
  * readers always see a complete corpus.
  */
-export const SCHEMA_SQL = `
+const BASE_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS artist (
   id       TEXT PRIMARY KEY,
   name     TEXT NOT NULL,
@@ -40,7 +40,14 @@ CREATE TABLE IF NOT EXISTS platform_link (
   confidence    DOUBLE PRECISION NOT NULL DEFAULT 0,
   PRIMARY KEY (recording_id, platform)
 );
+`;
 
+/**
+ * The weight index the sampler walks. Kept apart from the base tables because
+ * the daily rebuild creates a fresh copy of exactly these in a scratch schema
+ * and swaps it in (see rebuildWeights).
+ */
+export const WEIGHT_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS facet_value (
   facet_type  TEXT NOT NULL,
   facet_id    TEXT NOT NULL,
@@ -109,6 +116,18 @@ CREATE TABLE IF NOT EXISTS facet_catalog (
   PRIMARY KEY (dimension, value)
 );
 `;
+
+export const SCHEMA_SQL = BASE_SCHEMA_SQL + WEIGHT_SCHEMA_SQL;
+
+/** The weight index tables, rebuilt and swapped together. */
+export const WEIGHT_TABLES = [
+  'facet_value',
+  'facet_artist',
+  'artist_release_group',
+  'release_group_recording',
+  'sample_recording',
+  'facet_catalog',
+] as const;
 
 /** Serving tables, in an order safe to TRUNCATE together. */
 export const CORPUS_TABLES = [
