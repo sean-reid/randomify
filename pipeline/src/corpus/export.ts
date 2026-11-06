@@ -84,10 +84,36 @@ export interface CorpusData {
  * database is brought up to date in place (CREATE TABLE IF NOT EXISTS never
  * alters an existing table). Keep these idempotent.
  */
-const SCHEMA_MIGRATIONS = [
-  'ALTER TABLE recording ADD COLUMN IF NOT EXISTS cover_art_url TEXT',
-  'ALTER TABLE recording ADD COLUMN IF NOT EXISTS preview_url TEXT',
+const SCHEMA_MIGRATIONS: { column: string; sql: string }[] = [
+  {
+    column: 'cover_art_url',
+    sql: 'ALTER TABLE recording ADD COLUMN IF NOT EXISTS cover_art_url TEXT',
+  },
+  {
+    column: 'preview_url',
+    sql: 'ALTER TABLE recording ADD COLUMN IF NOT EXISTS preview_url TEXT',
+  },
+  {
+    column: 'cover_thumb',
+    sql: 'ALTER TABLE recording ADD COLUMN IF NOT EXISTS cover_thumb TEXT',
+  },
 ];
+
+/** Run only the migrations whose column is missing, so a current database never
+ * takes an AccessExclusive lock; the lock wait is bounded. */
+async function applyMigrations(client: SqlClient): Promise<void> {
+  const { rows } = await client.query(
+    `SELECT column_name FROM information_schema.columns
+     WHERE table_name = 'recording' AND table_schema = current_schema()`,
+  );
+  const present = new Set(rows.map((r) => String(r.column_name)));
+  const missing = SCHEMA_MIGRATIONS.filter((m) => !present.has(m.column));
+  if (missing.length === 0) return;
+  await withTransaction(client, async (tx) => {
+    await tx.query("SET LOCAL lock_timeout = '5s'");
+    for (const migration of missing) await tx.query(migration.sql);
+  });
+}
 
 /**
  * Best-effort accelerators that some engines lack. The artist typeahead uses a
@@ -118,7 +144,7 @@ export async function applyWeightSchema(client: SqlClient): Promise<void> {
 /** Create the corpus tables if they do not exist, then apply column migrations. */
 export async function applySchema(client: SqlClient): Promise<void> {
   for (const statement of statementsOf(SCHEMA_SQL)) await client.query(statement);
-  for (const migration of SCHEMA_MIGRATIONS) await client.query(migration);
+  await applyMigrations(client);
   for (const stmt of OPTIONAL_INDEXES) {
     try {
       await client.query(stmt);

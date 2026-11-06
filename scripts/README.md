@@ -12,7 +12,8 @@ corruption.
 | `refresh-dump.sh <env>`    | download latest MB dump → extract → (re)populate the backlog   | weekly             |
 | `resolve.sh <env>`         | resolve a batch of backlog recordings → upsert into the corpus | twice daily (prod) |
 | `rebuild-weights.sh <env>` | recompute the tempered prefix-sum weight index                 | daily              |
-| `load-small.sh <env>`      | one-shot: refresh → resolve → weights (for dev/staging)        | weekly             |
+| `cover-thumbs.sh <env>`    | fetch a tiny cover thumbnail for each recording without one    | hourly             |
+| `load-small.sh <env>`      | one-shot: refresh → resolve → weights → thumbs (dev/staging)   | weekly             |
 
 **Per-environment corpus size.** `dev`/`staging` set `CANDIDATE_LIMIT=1000` so the
 backlog - and therefore the corpus - can never exceed ~1000 (~877 streamable).
@@ -39,14 +40,14 @@ One script installs the right jobs for an environment (copies the plists into
 ```sh
 scripts/install-cron.sh dev          # weekly small load
 scripts/install-cron.sh staging      # weekly small load
-scripts/install-cron.sh production   # refresh (weekly) + resolve (twice daily) + weights (daily)
+scripts/install-cron.sh production   # refresh (weekly) + resolve (twice daily) + weights (daily) + thumbs (hourly)
 
 # run a job once to verify (the installer prints the exact label):
 launchctl kickstart -k gui/$(id -u)/com.randomify.dev-load
 ```
 
 `dev` and `staging` each install a single weekly `*-load` job; `production`
-installs the three separate-cadence jobs. Install `production` (and `staging`)
+installs the four separate-cadence jobs. Install `production` (and `staging`)
 **only after** the prod launch gate (a good initial corpus) is satisfied.
 
 The installed plists point at this checkout. If the repo moves, run the
