@@ -30,6 +30,7 @@ interface DemoSong {
   durationMs: number;
   previewUrl?: string;
   coverArtUrl?: string;
+  coverThumbUrl?: string;
 }
 
 /**
@@ -423,6 +424,7 @@ export class DemoCorpusProvider implements CorpusProvider {
       isrc: null,
       durationMs: s.durationMs,
       coverArtUrl: s.coverArtUrl ?? null,
+      coverThumbUrl: s.coverThumbUrl ?? null,
       previewUrl: s.previewUrl ?? null,
       genres: s.genres,
     };
