@@ -45,12 +45,18 @@ async function corpus(recordings: CorpusRecording[]): Promise<PGlite> {
 const BYTES = new Uint8Array([82, 73, 70, 70, 1, 2, 3]);
 const B64 = Buffer.from(BYTES).toString('base64');
 
+const discards: number[] = [];
+
 function res(status: number, contentType: string | null, bytes = BYTES): BinaryResponse {
   return {
     ok: status >= 200 && status < 300,
     status,
     contentType,
     bytes: () => Promise.resolve(bytes),
+    discard: () => {
+      discards.push(status);
+      return Promise.resolve();
+    },
   };
 }
 
@@ -176,6 +182,44 @@ describe('fillCoverThumbs', () => {
     expect(summary).toMatchObject({ deferred: 9, aborted: false });
   });
 
+  it('accepts a content type with parameters', async () => {
+    const db = await corpus([recording('r1', cover(1))]);
+    const summary = await fillCoverThumbs(db, {
+      fetch: fake(() => res(200, 'Image/WebP; charset=x')).fetch,
+    });
+    expect(summary).toMatchObject({ filled: 1, marked: 0 });
+  });
+
+  it('does not rescan deferred rows within a run', async () => {
+    const recs = Array.from({ length: 5 }, (_, i) => recording(`r${i}`, cover(i)));
+    const db = await corpus(recs);
+    const { fetch, urls } = fake((url) =>
+      url === thumb(0) ? res(503, null) : res(200, 'image/webp'),
+    );
+    const summary = await fillCoverThumbs(db, { fetch, batchSize: 2 });
+    expect(summary).toMatchObject({ scanned: 5, filled: 4, deferred: 1, aborted: false });
+    expect(urls.filter((u) => u === thumb(0))).toHaveLength(1);
+    expect((await thumbs(db)).r0).toBeNull();
+  });
+
+  it('discards the body of every response it does not read', async () => {
+    discards.length = 0;
+    const db = await corpus([
+      recording('r1', cover(1)),
+      recording('r2', cover(2)),
+      recording('r3', cover(3)),
+      recording('r4', cover(4)),
+    ]);
+    const { fetch } = fake((url) => {
+      if (url === thumb(1)) return res(404, 'text/html');
+      if (url === thumb(2)) return res(503, null);
+      if (url === thumb(3)) return res(200, 'text/html');
+      return res(200, 'image/webp');
+    });
+    await fillCoverThumbs(db, { fetch });
+    expect(discards.sort()).toEqual([200, 404, 503]);
+  });
+
   it('honours limit across batches', async () => {
     const recs = Array.from({ length: 6 }, (_, i) => recording(`r${i}`, cover(i)));
     const db = await corpus(recs);
@@ -226,6 +270,20 @@ describe('fillCoverThumbs', () => {
 });
 
 describe('ensureCoverThumbIndex', () => {
+  it('rebuilds an invalid index', async () => {
+    const db = await corpus([recording('r1', cover(1))]);
+    await ensureCoverThumbIndex(db);
+    await db.query(
+      `UPDATE pg_index SET indisvalid = false
+       WHERE indexrelid = 'recording_cover_thumb_todo'::regclass`,
+    );
+    await ensureCoverThumbIndex(db);
+    const r = await db.query<{ indisvalid: boolean }>(
+      `SELECT indisvalid FROM pg_index WHERE indexrelid = 'recording_cover_thumb_todo'::regclass`,
+    );
+    expect(r.rows).toEqual([{ indisvalid: true }]);
+  });
+
   it('creates the partial index and is repeatable', async () => {
     const db = await corpus([recording('r1', cover(1))]);
     await ensureCoverThumbIndex(db);
@@ -234,5 +292,9 @@ describe('ensureCoverThumbIndex', () => {
       `SELECT 1 FROM pg_indexes WHERE indexname = 'recording_cover_thumb_todo'`,
     );
     expect(r.rows).toHaveLength(1);
+    const def = await db.query<{ indexdef: string }>(
+      `SELECT indexdef FROM pg_indexes WHERE indexname = 'recording_cover_thumb_todo'`,
+    );
+    expect(def.rows[0]!.indexdef).toContain('cover_art_url IS NOT NULL');
   });
 });

@@ -53,6 +53,7 @@ describe('rateLimitedFetch', () => {
 describe('rateLimitedFetch with binary responses', () => {
   it('retries a 429 and returns the bytes', async () => {
     let calls = 0;
+    let discarded = 0;
     const base: BinaryFetchLike = () => {
       calls += 1;
       return Promise.resolve({
@@ -60,11 +61,16 @@ describe('rateLimitedFetch with binary responses', () => {
         status: calls > 1 ? 200 : 429,
         contentType: 'image/webp',
         bytes: () => Promise.resolve(new Uint8Array([1, 2, 3])),
+        discard: () => {
+          discarded += 1;
+          return Promise.resolve();
+        },
       });
     };
     const res = await rateLimitedFetch(base, { minIntervalMs: 1, max429Retries: 2 })('u');
     expect(res.status).toBe(200);
     expect(Array.from(await res.bytes())).toEqual([1, 2, 3]);
     expect(calls).toBe(2);
+    expect(discarded).toBe(1);
   });
 });

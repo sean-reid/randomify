@@ -44,9 +44,15 @@ type Outcome = { kind: 'thumb'; value: string } | { kind: 'deferred' };
 async function fetchThumb(fetchThumbUrl: BinaryFetchLike, url: string): Promise<Outcome> {
   try {
     const res = await fetchThumbUrl(url);
-    if (res.status === 429 || res.status >= 500) return { kind: 'deferred' };
-    if (!res.ok) return { kind: 'thumb', value: '' };
-    if (!res.contentType?.toLowerCase().startsWith('image/')) return { kind: 'thumb', value: '' };
+    const discard = (): Promise<void> => res.discard().catch(() => undefined);
+    if (res.status === 429 || res.status >= 500) {
+      await discard();
+      return { kind: 'deferred' };
+    }
+    if (!res.ok || !res.contentType?.toLowerCase().startsWith('image/')) {
+      await discard();
+      return { kind: 'thumb', value: '' };
+    }
     const bytes = await res.bytes();
     if (bytes.length === 0 || bytes.length > MAX_THUMB_BYTES) return { kind: 'thumb', value: '' };
     return { kind: 'thumb', value: Buffer.from(bytes).toString('base64') };
@@ -57,7 +63,7 @@ async function fetchThumb(fetchThumbUrl: BinaryFetchLike, url: string): Promise<
 
 /**
  * Store a base64 32x32 WebP for every recording with a cover URL and no thumb.
- * Each distinct cover URL is fetched once per run. Rows whose fetch is deferred
+ * Each distinct cover URL is fetched once per batch. Rows whose fetch is deferred
  * stay NULL, so the next run picks them up.
  */
 export async function fillCoverThumbs(
@@ -147,8 +153,16 @@ export async function fillCoverThumbs(
 
 /** Partial index that shrinks as the fill completes. CONCURRENTLY cannot run in a transaction. */
 export async function ensureCoverThumbIndex(client: SqlClient): Promise<void> {
+  const { rows } = await client.query(
+    `SELECT i.indisvalid FROM pg_index i
+     JOIN pg_class c ON c.oid = i.indexrelid
+     WHERE c.relname = 'recording_cover_thumb_todo' AND c.relnamespace = current_schema()::regnamespace`,
+  );
+  if (rows.length > 0 && rows[0]!.indisvalid === false) {
+    await client.query('DROP INDEX CONCURRENTLY recording_cover_thumb_todo');
+  }
   await client.query(
     `CREATE INDEX CONCURRENTLY IF NOT EXISTS recording_cover_thumb_todo
-     ON recording (cover_art_url, id) WHERE cover_thumb IS NULL`,
+     ON recording (cover_art_url, id) WHERE cover_thumb IS NULL AND cover_art_url IS NOT NULL`,
   );
 }
