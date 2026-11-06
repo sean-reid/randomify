@@ -146,6 +146,14 @@ async function providerFor(seeds: Seed[]): Promise<PostgresCorpusProvider> {
   return new PostgresCorpusProvider({ query: (sql, params) => db.query(sql, params) });
 }
 
+/** A solo-recording provider whose cover_thumb column is set to `thumb`. */
+async function providerWithThumb(thumb: string): Promise<PostgresCorpusProvider> {
+  const db = new PGlite();
+  await exportCorpus(db, corpusData([SEEDS[0]!]));
+  await db.query('UPDATE recording SET cover_thumb = $1 WHERE id = $2', [thumb, SEEDS[0]!.id]);
+  return new PostgresCorpusProvider({ query: (sql, params) => db.query(sql, params) });
+}
+
 /** A spin input pinned to one path, varying only the recording draw. The solo
  * corpora below have a single facet value / artist / release group, so the
  * facet, artist, and release-group draws are immaterial. */
@@ -222,6 +230,15 @@ describe('PostgresCorpusProvider', () => {
     ]);
   });
 
+  it('returns the cover thumb as a data URL, or null when empty', async () => {
+    const withThumb = await providerWithThumb('AAAA');
+    expect((await withThumb.spin(recordingProbe(0)))?.song.coverThumbUrl).toBe(
+      'data:image/webp;base64,AAAA',
+    );
+    const unavailable = await providerWithThumb('');
+    expect((await unavailable.spin(recordingProbe(0)))?.song.coverThumbUrl).toBeNull();
+  });
+
   it('maps the recording draw extremes to the ends of a partition', async () => {
     const pair = await providerFor([SEEDS[0]!, SEEDS[1]!]); // both a1 / rg1
     const low = (await pair.spin(recordingProbe(0)))?.song.recordingId;
@@ -248,6 +265,16 @@ describe('PostgresCorpusProvider', () => {
 
   describe('spinFiltered', () => {
     const empty = new Set<string>();
+
+    it('returns the cover thumb as a data URL, or null when empty', async () => {
+      const filters = { genres: [...SEEDS[0]!.genres] };
+      const withThumb = await providerWithThumb('AAAA');
+      const pick = await withThumb.spinFiltered({ filters, exclude: empty });
+      expect(pick?.song.coverThumbUrl).toBe('data:image/webp;base64,AAAA');
+      const unavailable = await providerWithThumb('');
+      const none = await unavailable.spinFiltered({ filters, exclude: empty });
+      expect(none?.song.coverThumbUrl).toBeNull();
+    });
 
     it('returns only recordings matching a single-dimension filter', async () => {
       for (let i = 0; i < 30; i++) {

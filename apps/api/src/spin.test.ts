@@ -92,6 +92,7 @@ describe('handleSpin', () => {
                   isrc: null,
                   durationMs: null,
                   coverArtUrl: null,
+                  coverThumbUrl: null,
                   previewUrl: null,
                   genres: [],
                 },

@@ -142,7 +142,7 @@ crec AS (
 )
 SELECT r.id, r.title, r.artist_id, a.name AS artist, r.release_group_id,
        rg.title AS release_title, r.year, r.isrc, r.duration_ms,
-       r.cover_art_url, r.preview_url, r.genres,
+       r.cover_art_url, r.cover_thumb, r.preview_url, r.genres,
        COALESCE((
          SELECT json_agg(json_build_object('platform', platform, 'url', url, 'kind', kind))
          FROM platform_link WHERE recording_id = r.id
@@ -160,7 +160,7 @@ JOIN release_group rg ON rg.id = r.release_group_id
 const HYDRATE_FROM_PICKED = `
 SELECT r.id, r.title, r.artist_id, a.name AS artist, r.release_group_id,
        rg.title AS release_title, r.year, r.isrc, r.duration_ms,
-       r.cover_art_url, r.preview_url, r.genres,
+       r.cover_art_url, r.cover_thumb, r.preview_url, r.genres,
        COALESCE((
          SELECT json_agg(json_build_object('platform', platform, 'url', url, 'kind', kind))
          FROM platform_link WHERE recording_id = r.id
@@ -314,6 +314,7 @@ function toSong(row: Record<string, unknown>): Song {
     isrc: row.isrc == null ? null : String(row.isrc),
     durationMs: row.duration_ms == null ? null : Number(row.duration_ms),
     coverArtUrl: row.cover_art_url == null ? null : String(row.cover_art_url),
+    coverThumbUrl: row.cover_thumb ? `data:image/webp;base64,${String(row.cover_thumb)}` : null,
     previewUrl: row.preview_url == null ? null : String(row.preview_url),
     genres: Array.isArray(row.genres) ? row.genres.map(String) : [],
   };

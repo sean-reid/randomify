@@ -421,6 +421,15 @@
   {#snippet coverArt(song: Song)}
     {#key song.recordingId}
       <span>{initial(song)}</span>
+      {#if song.coverThumbUrl}
+        <img
+          class="cover-thumb"
+          src={song.coverThumbUrl}
+          alt=""
+          aria-hidden="true"
+          data-testid="cover-thumb"
+        />
+      {/if}
       {#if song.coverArtUrl}
         <img
           class="cover-full"
@@ -638,6 +647,16 @@
     justify-content: center;
     overflow: hidden;
     position: relative;
+  }
+
+  .cover-thumb {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    filter: blur(6px);
+    transform: scale(1.12);
   }
 
   .cover-full {
