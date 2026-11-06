@@ -22,6 +22,7 @@
     "load:musicbrainz": "node dist/run/load-musicbrainz.js",
     "resolve": "node dist/run/resolve.js",
     "rebuild-weights": "node dist/run/weights-cli.js",
+    "cover-thumbs": "node dist/run/cover-thumbs-cli.js",
     "refresh-backlog": "node dist/run/refresh-backlog.js"
   },
   "dependencies": {
