@@ -1,7 +1,10 @@
 import { expect, test } from '@playwright/test';
-import { SAMPLE_FACETS, SAMPLE_SPIN } from './fixtures.js';
+import { SAMPLE_COVER_BYTES, SAMPLE_FACETS, SAMPLE_SPIN } from './fixtures.js';
 
 test.beforeEach(async ({ page }) => {
+  await page.route('**/images/cover/**', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'image/png', body: SAMPLE_COVER_BYTES });
+  });
   // Stand in for the API so the UI is exercised deterministically.
   await page.route('**/spin*', async (route) => {
     await route.fulfill({
@@ -264,4 +267,37 @@ test('browse backward and forward through the deck', async ({ page }) => {
   await expect(page.getByTestId('title')).toHaveText('Song 1');
   await page.getByTestId('next').click();
   await expect(page.getByTestId('title')).toHaveText('Song 2');
+});
+
+test('shows the card before the cover has loaded', async ({ page }, testInfo) => {
+  let release: () => void = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route('**/images/cover/**', async (route) => {
+    await gate;
+    await route.fulfill({ status: 200, contentType: 'image/png', body: SAMPLE_COVER_BYTES });
+  });
+  try {
+    await page.goto('/');
+    await expect(page.getByTestId('title')).toBeVisible();
+    const cover = page.getByTestId('cover-img');
+    await expect(cover).toBeAttached();
+    await expect(cover).not.toHaveClass(/loaded/);
+    await page.screenshot({ path: testInfo.outputPath('cover-pending.png') });
+  } finally {
+    release();
+  }
+  await expect(page.getByTestId('cover-img')).toHaveClass(/loaded/);
+  await page.screenshot({ path: testInfo.outputPath('cover-loaded.png') });
+});
+
+test('preconnects to the API and the Deezer CDNs', async ({ page }) => {
+  await page.goto('/');
+  const links = page.locator('head link[rel="preconnect"]');
+  await expect(links).toHaveCount(3);
+  await expect(links.nth(1)).toHaveAttribute('href', 'https://cdn-images.dzcdn.net');
+  await expect(links.nth(2)).toHaveAttribute('href', 'https://cdnt-preview.dzcdn.net');
+  await expect(links.nth(0)).toHaveAttribute('crossorigin', /.*/);
+  await expect(links.nth(0)).toHaveAttribute('href', /^https?:\/\/[^/]+\/?$/);
 });
