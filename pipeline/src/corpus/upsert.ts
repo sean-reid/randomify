@@ -66,6 +66,7 @@ export async function upsertCorpus(
       toPgArray(r.genres),
     ]),
     'id',
+    'cover_thumb = CASE WHEN recording.cover_art_url IS DISTINCT FROM EXCLUDED.cover_art_url THEN NULL ELSE recording.cover_thumb END',
   );
   await bulkUpsert(
     client,
