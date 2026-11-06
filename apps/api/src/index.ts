@@ -1,5 +1,6 @@
 import { hasFilters, parseFilters } from '@randomify/shared';
 import { getCorpus } from './corpus-factory.js';
+import { coverVariant } from './cover.js';
 import { computeState } from './neon.js';
 import { handleSpin } from './spin.js';
 import { resolvePreview, type PreviewOutcome } from './preview.js';
@@ -177,6 +178,9 @@ export default {
         // origin. A legacy absolute URL (pre-migration) is dropped, not served.
         const preview = result.song.previewUrl;
         result.song.previewUrl = preview?.startsWith('/') ? `${url.origin}${preview}` : null;
+        if (result.song.coverArtUrl) {
+          result.song.coverArtUrl = coverVariant(result.song.coverArtUrl, 500);
+        }
         emit(env, 'spin', 200, filtered ? 'ok_filtered' : 'ok', Date.now() - t0);
         return json(result);
       } catch (err) {
