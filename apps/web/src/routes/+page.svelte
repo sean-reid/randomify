@@ -14,6 +14,10 @@
   import { RecentArtists } from '$lib/recent';
   import FilterBar from '$lib/FilterBar.svelte';
 
+  // Covers already decoded this session; not reactive, read through `coverShown`.
+  const decodedCovers = new Set<string>();
+  let coverLoadedUrl = $state<string | null>(null);
+
   // A deck of spun songs: you walk back through ones you heard (left) and
   // forward to discover new ones (right). `index` is the current position.
   let history = $state<SpinResponse[]>([]);
@@ -52,6 +56,10 @@
 
   const current = $derived(index >= 0 ? (history[index] ?? null) : null);
   const song = $derived(current?.song ?? null);
+  const coverShown = $derived(
+    !!song?.coverArtUrl &&
+      (decodedCovers.has(song.coverArtUrl) || coverLoadedUrl === song.coverArtUrl),
+  );
   const canPrev = $derived(index > 0);
 
   // Concise screen-reader status: announced on song change / error, instead of
@@ -160,15 +168,20 @@
     if (song?.previewUrl) playerError = true;
   }
 
-  /** Preload and decode a cover so it appears in sync with the title. */
-  async function loadCover(url: string | null): Promise<void> {
+  function delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  /** Fetch and decode a cover in the background; failures are ignored. */
+  async function primeCover(url: string | null): Promise<void> {
     if (!url || typeof Image === 'undefined') return;
     const img = new Image();
     img.src = url;
     try {
-      await Promise.race([img.decode(), new Promise((resolve) => setTimeout(resolve, 1200))]);
+      await img.decode();
+      decodedCovers.add(url);
     } catch {
-      // Show the card regardless if the cover fails to decode.
+      // A cover that fails to load leaves the placeholder.
     }
   }
 
@@ -202,12 +215,10 @@
         }
         const url = candidate.song.previewUrl;
         // Only commit a song we can actually play: it must have a preview and it
-        // must load. Validate and warm the cover together so a committed song
-        // shows art and title in sync.
-        const [playable] = await Promise.all([
-          url ? isPreviewLive(url) : Promise.resolve(false),
-          loadCover(candidate.song.coverArtUrl),
-        ]);
+        // must load. The cover loads alongside but never gates the card.
+        const priming = primeCover(candidate.song.coverArtUrl);
+        const playable = url ? await isPreviewLive(url) : false;
+        if (playable) await Promise.race([priming, delay(80)]);
         if (stale()) return;
         if (playable) {
           result = candidate;
@@ -227,7 +238,7 @@
       // Warm the next spin and preload its cover so the next discover is instant.
       const warm = spin(recent, filters);
       prefetched = warm;
-      void warm.then((r) => r && loadCover(r.song.coverArtUrl));
+      void warm.then((r) => r && primeCover(r.song.coverArtUrl));
     } catch (e) {
       if (!stale()) error = e instanceof Error ? e.message : 'Something went wrong.';
     } finally {
@@ -407,6 +418,23 @@
     >
   {/snippet}
 
+  {#snippet coverArt(song: Song)}
+    {#key song.recordingId}
+      {#if song.coverArtUrl}
+        <img
+          class="cover-full"
+          class:loaded={coverShown}
+          src={song.coverArtUrl}
+          alt=""
+          data-testid="cover-img"
+          onload={() => (coverLoadedUrl = song.coverArtUrl)}
+        />
+      {:else}
+        <span>{initial(song)}</span>
+      {/if}
+    {/key}
+  {/snippet}
+
   <p class="sr-only" aria-live="polite" data-testid="status">{status}</p>
 
   <section class="stage">
@@ -426,22 +454,14 @@
             aria-label={playing ? 'Pause preview' : 'Play preview'}
             data-testid="cover-toggle"
           >
-            {#if song.coverArtUrl}
-              <img src={song.coverArtUrl} alt="" />
-            {:else}
-              <span>{initial(song)}</span>
-            {/if}
+            {@render coverArt(song)}
             <span class="play-overlay" class:playing aria-hidden="true">
               {@render (playing ? pauseIcon : playIcon)()}
             </span>
           </button>
         {:else}
           <div class="cover" aria-hidden="true">
-            {#if song.coverArtUrl}
-              <img src={song.coverArtUrl} alt="" />
-            {:else}
-              <span>{initial(song)}</span>
-            {/if}
+            {@render coverArt(song)}
           </div>
         {/if}
 
@@ -618,12 +638,21 @@
     align-items: center;
     justify-content: center;
     overflow: hidden;
+    position: relative;
   }
 
-  .cover img {
+  .cover-full {
+    position: absolute;
+    inset: 0;
     width: 100%;
     height: 100%;
     object-fit: cover;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+  }
+
+  .cover-full.loaded {
+    opacity: 1;
   }
 
   .cover span {
