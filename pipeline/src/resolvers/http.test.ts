@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { rateLimitedFetch, type FetchLike } from './http.js';
+import { rateLimitedFetch, type BinaryFetchLike, type FetchLike } from './http.js';
 
 const ok: () => Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }> = () =>
   Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({}) });
@@ -47,5 +47,24 @@ describe('rateLimitedFetch', () => {
     starts.sort((a, b) => a - b);
     expect(starts[1]! - starts[0]!).toBeGreaterThanOrEqual(20);
     expect(starts[2]! - starts[1]!).toBeGreaterThanOrEqual(20);
+  });
+});
+
+describe('rateLimitedFetch with binary responses', () => {
+  it('retries a 429 and returns the bytes', async () => {
+    let calls = 0;
+    const base: BinaryFetchLike = () => {
+      calls += 1;
+      return Promise.resolve({
+        ok: calls > 1,
+        status: calls > 1 ? 200 : 429,
+        contentType: 'image/webp',
+        bytes: () => Promise.resolve(new Uint8Array([1, 2, 3])),
+      });
+    };
+    const res = await rateLimitedFetch(base, { minIntervalMs: 1, max429Retries: 2 })('u');
+    expect(res.status).toBe(200);
+    expect(Array.from(await res.bytes())).toEqual([1, 2, 3]);
+    expect(calls).toBe(2);
   });
 });
