@@ -295,10 +295,28 @@ test('shows the card before the cover has loaded', async ({ page }, testInfo) =>
     release();
   }
   await expect(page.getByTestId('cover-img')).toHaveClass(/loaded/);
+  const thumbBelowCover = await page
+    .getByTestId('cover-thumb')
+    .evaluate(
+      (el) =>
+        !!(
+          el.compareDocumentPosition(document.querySelector('[data-testid="cover-img"]')!) &
+          Node.DOCUMENT_POSITION_FOLLOWING
+        ),
+    );
+  expect(thumbBelowCover).toBe(true);
   await page.screenshot({ path: testInfo.outputPath('cover-loaded.png') });
 });
 
 test('draws no thumb and keeps the initial when the song has none', async ({ page }) => {
+  let release: () => void = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route('**/images/cover/**', async (route) => {
+    await gate;
+    await route.fulfill({ status: 200, contentType: 'image/png', body: SAMPLE_COVER_BYTES });
+  });
   await page.route('**/spin*', async (route) => {
     await route.fulfill({
       status: 200,
@@ -306,10 +324,16 @@ test('draws no thumb and keeps the initial when the song has none', async ({ pag
       body: JSON.stringify({ ...SAMPLE_SPIN, song: { ...SAMPLE_SPIN.song, coverThumbUrl: null } }),
     });
   });
-  await page.goto('/');
-  await expect(page.getByTestId('title')).toHaveText(SAMPLE_SPIN.song.title);
-  await expect(page.getByTestId('cover-thumb')).toHaveCount(0);
-  await expect(page.getByTestId('result').getByText('R', { exact: true })).toBeVisible();
+  try {
+    await page.goto('/');
+    await expect(page.getByTestId('title')).toHaveText(SAMPLE_SPIN.song.title);
+    await expect(page.getByTestId('cover-img')).not.toHaveClass(/loaded/);
+    await expect(page.getByTestId('cover-thumb')).toHaveCount(0);
+    await expect(page.getByTestId('result').getByText('R', { exact: true })).toBeVisible();
+  } finally {
+    release();
+  }
+  await expect(page.getByTestId('cover-img')).toHaveClass(/loaded/);
 });
 
 test('preconnects to the API and the Deezer CDNs', async ({ page }) => {
