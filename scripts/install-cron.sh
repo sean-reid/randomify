@@ -5,7 +5,7 @@
 #
 #   scripts/install-cron.sh dev          # the weekly small load
 #   scripts/install-cron.sh staging      # the weekly small load
-#   scripts/install-cron.sh production   # refresh (weekly) + resolve (twice daily) + weights (daily)
+#   scripts/install-cron.sh production   # refresh (weekly) + resolve (twice daily) + weights (daily) + thumbs (hourly)
 #
 # Production jobs should only be installed once the launch gate (a good initial
 # corpus) is satisfied. See scripts/README.md.
@@ -16,11 +16,11 @@ REPO="$(cd "$DIR/.." && pwd)"
 AGENTS="$HOME/Library/LaunchAgents"
 
 # Labels installed per environment (dev/staging run the single small load; prod
-# runs the three separate-cadence jobs).
+# runs the separate-cadence jobs).
 case "$ENV" in
   dev) LABELS=(com.randomify.dev-load) ;;
   staging) LABELS=(com.randomify.staging-load) ;;
-  production) LABELS=(com.randomify.prod-refresh com.randomify.prod-resolve com.randomify.prod-weights) ;;
+  production) LABELS=(com.randomify.prod-refresh com.randomify.prod-resolve com.randomify.prod-weights com.randomify.prod-thumbs) ;;
   *)
     echo "unknown env: $ENV (want dev|staging|production)" >&2
     exit 1

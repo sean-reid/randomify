@@ -7,6 +7,7 @@ export * from './corpus/backfill.js';
 export * from './corpus/schema.js';
 export * from './corpus/export.js';
 export * from './corpus/upsert.js';
+export * from './corpus/cover-thumbs.js';
 export * from './resolvers/index.js';
 export * from './run/prioritize.js';
 export * from './run/resolve-batch.js';

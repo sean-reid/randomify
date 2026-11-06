@@ -83,4 +83,32 @@ describe('upsertCorpus', () => {
     );
     expect([...genres.rows[0]!.genres].sort()).toEqual(['bossa nova', 'rock']);
   });
+
+  it('leaves cover_thumb alone when a recording is upserted again', async () => {
+    const db = new PGlite();
+    await upsertCorpus(client(db), data('https://deezer/v1'));
+    await db.query(`UPDATE recording SET cover_thumb = 'abc' WHERE id = 'r1'`);
+    const changed = data('https://deezer/v1');
+    changed.recordings[0]!.title = 'Renamed';
+    await upsertCorpus(client(db), changed);
+    const res = await db.query<{ title: string; cover_thumb: string | null }>(
+      `SELECT title, cover_thumb FROM recording WHERE id = 'r1'`,
+    );
+    expect(res.rows[0]).toEqual({ title: 'Renamed', cover_thumb: 'abc' });
+  });
+
+  it('resets cover_thumb when the cover URL changes', async () => {
+    const db = new PGlite();
+    const first = data('https://deezer/v1');
+    first.recordings[0]!.coverArtUrl = 'https://cdn/old.jpg';
+    await upsertCorpus(client(db), first);
+    await db.query(`UPDATE recording SET cover_thumb = 'abc' WHERE id = 'r1'`);
+    const changed = data('https://deezer/v1');
+    changed.recordings[0]!.coverArtUrl = 'https://cdn/new.jpg';
+    await upsertCorpus(client(db), changed);
+    const res = await db.query<{ cover_thumb: string | null }>(
+      `SELECT cover_thumb FROM recording WHERE id = 'r1'`,
+    );
+    expect(res.rows[0]!.cover_thumb).toBeNull();
+  });
 });

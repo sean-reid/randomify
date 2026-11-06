@@ -134,4 +134,41 @@ describe('exportCorpus against PGlite', () => {
     const res = await db.query<{ n: number }>(`SELECT count(*)::int AS n FROM recording`);
     expect(res.rows[0]!.n).toBe(2);
   });
+
+  it('creates cover_thumb on a fresh database', async () => {
+    const db = new PGlite();
+    await applySchema(db);
+    expect(await thumbColumn(db)).toBe(1);
+  });
+
+  it('adds cover_thumb to a table created without it', async () => {
+    const db = new PGlite();
+    await db.query(
+      `CREATE TABLE recording (id TEXT PRIMARY KEY, artist_id TEXT NOT NULL,
+         release_group_id TEXT NOT NULL, title TEXT NOT NULL)`,
+    );
+    await applySchema(db);
+    expect(await thumbColumn(db)).toBe(1);
+  });
+
+  it('issues no ALTER once the columns exist', async () => {
+    const db = new PGlite();
+    await applySchema(db);
+    const seen: string[] = [];
+    await applySchema({
+      query: (sql, params) => {
+        seen.push(sql);
+        return db.query(sql, params);
+      },
+    });
+    expect(seen.filter((q) => /ALTER\s+TABLE/i.test(q))).toEqual([]);
+  });
 });
+
+async function thumbColumn(db: PGlite): Promise<number> {
+  const res = await db.query<{ n: number }>(
+    `SELECT count(*)::int AS n FROM information_schema.columns
+     WHERE table_name = 'recording' AND column_name = 'cover_thumb'`,
+  );
+  return res.rows[0]!.n;
+}
