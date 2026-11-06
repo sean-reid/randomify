@@ -10,7 +10,7 @@ AGENTS="$HOME/Library/LaunchAgents"
 case "$ENV" in
   dev) LABELS=(com.randomify.dev-load) ;;
   staging) LABELS=(com.randomify.staging-load) ;;
-  production) LABELS=(com.randomify.prod-refresh com.randomify.prod-resolve com.randomify.prod-weights) ;;
+  production) LABELS=(com.randomify.prod-refresh com.randomify.prod-resolve com.randomify.prod-weights com.randomify.prod-thumbs) ;;
   *)
     echo "unknown env: $ENV (want dev|staging|production)" >&2
     exit 1

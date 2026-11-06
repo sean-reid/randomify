@@ -16,7 +16,7 @@ REPO="$(cd "$DIR/.." && pwd)"
 AGENTS="$HOME/Library/LaunchAgents"
 
 # Labels installed per environment (dev/staging run the single small load; prod
-# runs the three separate-cadence jobs).
+# runs the separate-cadence jobs).
 case "$ENV" in
   dev) LABELS=(com.randomify.dev-load) ;;
   staging) LABELS=(com.randomify.staging-load) ;;
