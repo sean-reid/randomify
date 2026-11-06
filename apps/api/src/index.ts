@@ -1,5 +1,6 @@
 import { hasFilters, parseFilters } from '@randomify/shared';
 import { getCorpus } from './corpus-factory.js';
+import { coverVariant } from './cover.js';
 import { computeState } from './neon.js';
 import { handleSpin } from './spin.js';
 import { resolvePreview, type PreviewOutcome } from './preview.js';
@@ -63,8 +64,8 @@ async function handlePreview(
     return json({ error: 'bad track id' }, 400);
   }
 
-  const cache = caches.default;
-  const hit = await cache.match(request);
+  const cache = edgeCache();
+  const hit = await cache?.match(request);
   if (hit) {
     emit(env, 'preview', 302, 'ok_cached', ms());
     return hit;
@@ -104,14 +105,18 @@ async function handlePreview(
     status: 302,
     headers: { location: outcome.url, 'cache-control': 'public, max-age=45', ...CORS_HEADERS },
   });
-  ctx.waitUntil(cache.put(request, res.clone()));
+  if (cache) ctx.waitUntil(cache.put(request, res.clone()));
   return res;
 }
 
-function json(body: unknown, status = 200): Response {
+function edgeCache(): Cache | undefined {
+  return (globalThis as { caches?: CacheStorage }).caches?.default;
+}
+
+function json(body: unknown, status = 200, extra: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { 'content-type': 'application/json', ...CORS_HEADERS },
+    headers: { 'content-type': 'application/json', ...CORS_HEADERS, ...extra },
   });
 }
 
@@ -177,6 +182,9 @@ export default {
         // origin. A legacy absolute URL (pre-migration) is dropped, not served.
         const preview = result.song.previewUrl;
         result.song.previewUrl = preview?.startsWith('/') ? `${url.origin}${preview}` : null;
+        if (result.song.coverArtUrl) {
+          result.song.coverArtUrl = coverVariant(result.song.coverArtUrl, 500);
+        }
         emit(env, 'spin', 200, filtered ? 'ok_filtered' : 'ok', Date.now() - t0);
         return json(result);
       } catch (err) {
@@ -192,12 +200,20 @@ export default {
     if (url.pathname === '/facets') {
       if (request.method !== 'GET') return json({ error: 'method not allowed' }, 405);
       const t0 = Date.now();
+      const cache = edgeCache();
+      const hit = await cache?.match(request);
+      if (hit) {
+        emit(env, 'facets', 200, 'ok_cached', Date.now() - t0);
+        return hit;
+      }
       const filters = parseFilters((key) => url.searchParams.get(key));
       const corpus = getCorpus(env);
       try {
         const catalog = await corpus.provider.facets(filters);
         emit(env, 'facets', 200, hasFilters(filters) ? 'ok_filtered' : 'ok', Date.now() - t0);
-        return json(catalog);
+        const res = json(catalog, 200, { 'cache-control': 'public, max-age=300' });
+        if (cache) ctx.waitUntil(cache.put(request, res.clone()));
+        return res;
       } catch (err) {
         console.error('facets failed', err);
         emit(env, 'facets', 503, 'corpus_unavailable', Date.now() - t0);
