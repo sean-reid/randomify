@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.7.0](https://github.com/sean-reid/randomify/compare/v0.6.2...v0.7.0) (2026-11-06)
+
+
+### Features
+
+* **pipeline:** store a tiny cover thumbnail per recording ([#123](https://github.com/sean-reid/randomify/issues/123)) ([b07bf2d](https://github.com/sean-reid/randomify/commit/b07bf2d8cb5b8da551d5e34c79f797038a559565))
+* show a blurred cover placeholder until the cover loads ([#125](https://github.com/sean-reid/randomify/issues/125)) ([9ba48bb](https://github.com/sean-reid/randomify/commit/9ba48bbf1ddd4d9413ae817e6b5b4ebe5efff944))
+
+
+### Performance Improvements
+
+* show the first song before its cover loads ([#122](https://github.com/sean-reid/randomify/issues/122)) ([7327879](https://github.com/sean-reid/randomify/commit/7327879a466731102d93020303bce3f997a4b1f0))
+
 ## [0.6.2](https://github.com/sean-reid/randomify/compare/v0.6.1...v0.6.2) (2026-09-28)
 
 
