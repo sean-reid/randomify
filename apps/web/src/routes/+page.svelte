@@ -181,7 +181,7 @@
       await img.decode();
       decodedCovers.add(url);
     } catch {
-      // A cover that fails to load leaves the placeholder.
+      // A failed cover stays out of decodedCovers; the initial shows instead.
     }
   }
 
@@ -420,6 +420,7 @@
 
   {#snippet coverArt(song: Song)}
     {#key song.recordingId}
+      <span>{initial(song)}</span>
       {#if song.coverArtUrl}
         <img
           class="cover-full"
@@ -429,8 +430,6 @@
           data-testid="cover-img"
           onload={() => (coverLoadedUrl = song.coverArtUrl)}
         />
-      {:else}
-        <span>{initial(song)}</span>
       {/if}
     {/key}
   {/snippet}
