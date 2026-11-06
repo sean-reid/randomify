@@ -280,7 +280,7 @@ test('shows the card before the cover has loaded', async ({ page }, testInfo) =>
   });
   try {
     await page.goto('/');
-    await expect(page.getByTestId('title')).toBeVisible();
+    await expect(page.getByTestId('title')).toBeVisible({ timeout: 500 });
     const cover = page.getByTestId('cover-img');
     await expect(cover).toBeAttached();
     await expect(cover).not.toHaveClass(/loaded/);
@@ -300,4 +300,14 @@ test('preconnects to the API and the Deezer CDNs', async ({ page }) => {
   await expect(links.nth(2)).toHaveAttribute('href', 'https://cdnt-preview.dzcdn.net');
   await expect(links.nth(0)).toHaveAttribute('crossorigin', /.*/);
   await expect(links.nth(0)).toHaveAttribute('href', /^https?:\/\/[^/]+\/?$/);
+});
+
+test('shows the initial when the cover fails to load', async ({ page }, testInfo) => {
+  await page.route('**/images/cover/**', (route) => route.fulfill({ status: 404, body: '' }));
+  await page.goto('/');
+  await expect(page.getByTestId('title')).toHaveText(SAMPLE_SPIN.song.title);
+  await expect(page.getByTestId('result').getByText('R', { exact: true })).toBeVisible();
+  await expect(page.getByTestId('cover-img')).not.toHaveClass(/loaded/);
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: testInfo.outputPath('cover-failed.png') });
 });
