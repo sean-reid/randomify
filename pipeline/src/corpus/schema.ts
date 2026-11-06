@@ -29,6 +29,8 @@ CREATE TABLE IF NOT EXISTS recording (
   language          TEXT,
   cover_art_url     TEXT,
   preview_url       TEXT,
+  -- cover_thumb: NULL = not attempted, '' = fetched and permanently unavailable, else base64 WebP
+  cover_thumb       TEXT,
   genres            TEXT[] NOT NULL DEFAULT '{}'
 );
 

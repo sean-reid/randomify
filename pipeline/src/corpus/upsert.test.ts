@@ -83,4 +83,17 @@ describe('upsertCorpus', () => {
     );
     expect([...genres.rows[0]!.genres].sort()).toEqual(['bossa nova', 'rock']);
   });
+
+  it('leaves cover_thumb alone when a recording is upserted again', async () => {
+    const db = new PGlite();
+    await upsertCorpus(client(db), data('https://deezer/v1'));
+    await db.query(`UPDATE recording SET cover_thumb = 'abc' WHERE id = 'r1'`);
+    const changed = data('https://deezer/v1');
+    changed.recordings[0]!.title = 'Renamed';
+    await upsertCorpus(client(db), changed);
+    const res = await db.query<{ title: string; cover_thumb: string | null }>(
+      `SELECT title, cover_thumb FROM recording WHERE id = 'r1'`,
+    );
+    expect(res.rows[0]).toEqual({ title: 'Renamed', cover_thumb: 'abc' });
+  });
 });
