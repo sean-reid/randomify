@@ -284,12 +284,32 @@ test('shows the card before the cover has loaded', async ({ page }, testInfo) =>
     const cover = page.getByTestId('cover-img');
     await expect(cover).toBeAttached();
     await expect(cover).not.toHaveClass(/loaded/);
+    await expect(page.getByTestId('cover-thumb')).toBeVisible();
+    await expect
+      .poll(() =>
+        page.getByTestId('cover-thumb').evaluate((el) => (el as HTMLImageElement).naturalWidth),
+      )
+      .toBeGreaterThan(0);
     await page.screenshot({ path: testInfo.outputPath('cover-pending.png') });
   } finally {
     release();
   }
   await expect(page.getByTestId('cover-img')).toHaveClass(/loaded/);
   await page.screenshot({ path: testInfo.outputPath('cover-loaded.png') });
+});
+
+test('draws no thumb and keeps the initial when the song has none', async ({ page }) => {
+  await page.route('**/spin*', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ ...SAMPLE_SPIN, song: { ...SAMPLE_SPIN.song, coverThumbUrl: null } }),
+    });
+  });
+  await page.goto('/');
+  await expect(page.getByTestId('title')).toHaveText(SAMPLE_SPIN.song.title);
+  await expect(page.getByTestId('cover-thumb')).toHaveCount(0);
+  await expect(page.getByTestId('result').getByText('R', { exact: true })).toBeVisible();
 });
 
 test('preconnects to the API and the Deezer CDNs', async ({ page }) => {
